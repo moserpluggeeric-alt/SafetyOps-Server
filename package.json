@@ -1,0 +1,15 @@
+{
+  "name": "safetyops-api",
+  "version": "1.0.0",
+  "description": "SafetyOps API Server — HTTP bridge to SafetyOps engine via WebSocket",
+  "main": "safetyops-server.js",
+  "scripts": {
+    "start": "node safetyops-server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

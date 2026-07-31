@@ -1,0 +1,17 @@
+# Dependencies (installed inside container via npm ci)
+node_modules/
+
+# Development and documentation files (not needed in container)
+*.md
+validate-local.js
+.env
+.env.*
+.env.example
+
+# Git
+.git/
+.gitignore
+
+# OS artifacts
+.DS_Store
+Thumbs.db
