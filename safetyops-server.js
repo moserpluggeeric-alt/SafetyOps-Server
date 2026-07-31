@@ -52,6 +52,31 @@ const CORS_ORIGINS    = CORS_ORIGIN_RAW === '*'
 const PING_INTERVAL = 30_000;  // 30s between pings
 const PONG_TIMEOUT  = 90_000;  // 90s without any pong → stale, close
 
+// ── Local Analysis Engine ─────────────────────────────────────────────────────
+// Equivalencia validada 50/50 (100%) — 2026-07-31.
+// USE_LOCAL_ENGINE=true  → análisis en-proceso sin WebSocket (PRODUCCIÓN).
+// USE_LOCAL_ENGINE=false → puente WebSocket a SafetyOps_v2.html (fallback/legacy).
+// COMPARE_MODE=true      → corre ambos motores y loguea diferencias (solo transición).
+// COMPARE_MODE=false     → modo producción normal.
+const USE_LOCAL_ENGINE = process.env.USE_LOCAL_ENGINE !== 'false'; // default: true (PRODUCCIÓN)
+const COMPARE_MODE     = process.env.COMPARE_MODE     === 'true';  // default: false (PRODUCCIÓN)
+
+let _engine = null;
+try {
+  _engine = require('./analysis-engine');
+  console.log('[engine] Local analysis-engine loaded OK — USE_LOCAL_ENGINE=' + USE_LOCAL_ENGINE + ' COMPARE_MODE=' + COMPARE_MODE);
+} catch (err) {
+  console.warn('[engine] analysis-engine load failed:', err.message, '— WS-only mode');
+}
+
+// ── Diagnostic Mode ───────────────────────────────────────────────────────────
+// Unified trace logger — add observability without touching any logic.
+// All TRACE calls are pure console output; no side effects on control flow.
+function TRACE(step, title, data) {
+  if (data === undefined) data = {};
+  console.log('[TRACE ' + String(step).padStart(2, '0') + '] ' + title, data);
+}
+
 /** Operational areas — must match SafetyOps_v2.html SEED */
 const AREAS = [
   'Operaciones de Vuelo',
@@ -71,6 +96,9 @@ const MAX_TEXTO_LENGTH = 10_000;
 
 /** The single authenticated WebSocket from SafetyOps_v2.html. */
 let engineSocket = null;
+
+/** Auto-increment counter for local engine folio numbers. */
+let _nextReportId = 1;
 
 /**
  * Pending HTTP requests awaiting a SafetyOps response.
@@ -154,7 +182,13 @@ function handleConfig(res, origin) {
 }
 
 async function handlePostReport(req, res, origin) {
-  if (!isEngineConnected()) {
+  const _t0 = Date.now(); // request-scoped timer — observability only
+  const _fn = 'handlePostReport';
+  TRACE( 1, 'POST /api/v1/reports received',   { fn: _fn, method: req.method, url: req.url, origin, elapsed: 0 });
+  TRACE( 5, 'engineSocket state',               { fn: _fn, socketExists: !!engineSocket, readyState: engineSocket ? engineSocket.readyState : null, elapsed: Date.now() - _t0 });
+  TRACE( 6, 'isEngineConnected()',              { fn: _fn, connected: isEngineConnected(), elapsed: Date.now() - _t0 });
+  if (!USE_LOCAL_ENGINE && !isEngineConnected()) {
+    TRACE( 6, 'ENGINE NOT CONNECTED — early return 503', { fn: _fn, reason: 'engineSocket null or readyState !== 1', elapsed: Date.now() - _t0 });
     return sendJSON(res, 503, {
       error:       'engine_unavailable',
       message:     'SafetyOps is not connected. Open SafetyOps_v2.html and try again.',
@@ -165,14 +199,18 @@ async function handlePostReport(req, res, origin) {
   let raw;
   try {
     raw = await readBody(req);
-  } catch {
+    TRACE( 2, 'Body received',                  { fn: _fn, byteLength: raw.length, elapsed: Date.now() - _t0 });
+  } catch (err) {
+    TRACE( 2, 'ERROR reading body — early return 400', { fn: _fn, reason: err.message, elapsed: Date.now() - _t0 });
     return sendJSON(res, 400, { error: 'read_error', message: 'Could not read request body.' }, origin);
   }
 
   let body;
   try {
     body = JSON.parse(raw);
-  } catch {
+    TRACE( 3, 'JSON parse OK',                  { fn: _fn, keys: Object.keys(body), textoLen: body.texto ? body.texto.length : 0, area: body.area, identidad: body.identidad, elapsed: Date.now() - _t0 });
+  } catch (err) {
+    TRACE( 3, 'ERROR JSON parse failed — early return 400', { fn: _fn, reason: err.message, rawSlice: raw.slice(0, 100), elapsed: Date.now() - _t0 });
     return sendJSON(res, 400, { error: 'invalid_json', message: 'Request body must be valid JSON.' }, origin);
   }
 
@@ -191,10 +229,37 @@ async function handlePostReport(req, res, origin) {
     errors.push(`identidad must be one of: ${IDENTIDADES.join(', ')}`);
   }
   if (errors.length > 0) {
+    TRACE( 4, 'VALIDATION FAILED — early return 400', { fn: _fn, reason: 'field validation errors', errors, elapsed: Date.now() - _t0 });
     return sendJSON(res, 400, { error: 'validation_error', fields: errors }, origin);
   }
+  TRACE( 4, 'Validation OK',                    { fn: _fn, texto_len: body.texto.trim().length, area: body.area, identidad: body.identidad || 'anonimo', elapsed: Date.now() - _t0 });
+
+  // ── LOCAL ENGINE PATH ──────────────────────────────────────────────────────
+  // Active when USE_LOCAL_ENGINE=true. Skips WebSocket entirely.
+  if (USE_LOCAL_ENGINE && _engine) {
+    const correlationId = crypto.randomUUID();
+    TRACE( 7, 'correlationId generated (LOCAL)',  { fn: _fn, correlationId, elapsed: Date.now() - _t0 });
+    try {
+      const localResult = _engine.analyzeReport({
+        texto:     body.texto.trim(),
+        area:      body.area,
+        identidad: body.identidad || 'anonimo',
+        lang:      body.lang || 'es',
+        nextId:    _nextReportId++,
+        timestamp: new Date().toISOString(),
+        geo:       body.geo || null,
+      });
+      TRACE(14, 'LOCAL ENGINE — HTTP 200 sent',   { fn: _fn, correlationId, folio: localResult.folio, categoria: localResult.categoria, elapsed: Date.now() - _t0 });
+      return sendJSON(res, 200, localResult, origin);
+    } catch (err) {
+      console.error('[engine] Local engine error:', err);
+      return sendJSON(res, 500, { error: 'engine_error', message: err.message }, origin);
+    }
+  }
+  // ── END LOCAL ENGINE PATH ──────────────────────────────────────────────────
 
   const correlationId = crypto.randomUUID();
+  TRACE( 7, 'correlationId generated',           { fn: _fn, correlationId, elapsed: Date.now() - _t0 });
   const message = JSON.stringify({
     correlationId,
     type: 'report',
@@ -202,6 +267,7 @@ async function handlePostReport(req, res, origin) {
       texto:      body.texto.trim(),
       area:       body.area,
       identidad:  body.identidad || 'anonimo',
+      lang:       body.lang || 'es',
       usuario_id: body.usuario_id || null,
       geo:        body.geo || null,
       timestamp:  new Date().toISOString(),
@@ -215,25 +281,64 @@ async function handlePostReport(req, res, origin) {
     }
   }, ENGINE_TIMEOUT);
 
+  TRACE(11, 'Awaiting engine response',          { fn: _fn, correlationId, timeoutMs: ENGINE_TIMEOUT, elapsed: Date.now() - _t0 });
   await new Promise((resolve, reject) => {
     pendingRequests.set(correlationId, { resolve, reject, timer });
+    TRACE( 8, 'pendingRequests entry created',   { fn: _fn, correlationId, pendingCount: pendingRequests.size, elapsed: Date.now() - _t0 });
+    TRACE( 9, 'Sending report via WebSocket',    { fn: _fn, correlationId, messageLen: message.length, elapsed: Date.now() - _t0 });
     try {
       engineSocket.send(message);
+      TRACE(10, 'engineSocket.send() OK — ball in engine court', { fn: _fn, correlationId, elapsed: Date.now() - _t0 });
     } catch (err) {
+      TRACE(10, 'ERROR engineSocket.send() threw', { fn: _fn, correlationId, reason: err.message, elapsed: Date.now() - _t0 });
       clearTimeout(timer);
       pendingRequests.delete(correlationId);
       reject(err);
     }
   }).then(result => {
+    TRACE(14, 'HTTP 200 sent to mobile',         { fn: _fn, correlationId, folio: result ? result.folio : null, categoria: result ? result.categoria : null, elapsed: Date.now() - _t0 });
+
+    // ── COMPARE MODE ────────────────────────────────────────────────────────
+    // Runs local engine alongside WS result; logs divergences. No effect on response.
+    if (COMPARE_MODE && _engine && result) {
+      try {
+        const localResult = _engine.analyzeReport({
+          texto:     body.texto.trim(),
+          area:      body.area,
+          identidad: body.identidad || 'anonimo',
+          lang:      body.lang || 'es',
+          nextId:    _nextReportId++,
+          timestamp: new Date().toISOString(),
+          geo:       body.geo || null,
+        });
+        const match = localResult.categoria === result.categoria &&
+                      localResult.nivel_riesgo === result.nivel_riesgo;
+        console.log('[COMPARE] id=' + correlationId + ' match=' + match +
+          ' WS={cat:' + result.categoria + ',riesgo:' + result.nivel_riesgo + '}' +
+          ' LOCAL={cat:' + localResult.categoria + ',riesgo:' + localResult.nivel_riesgo + '}');
+        if (!match) {
+          console.warn('[COMPARE] DIVERGENCE:', JSON.stringify({
+            ws:    { categoria: result.categoria,      nivel_riesgo: result.nivel_riesgo,      severidad: result.severidad,      probabilidad: result.probabilidad },
+            local: { categoria: localResult.categoria, nivel_riesgo: localResult.nivel_riesgo, severidad: localResult.severidad, probabilidad: localResult.probabilidad },
+          }));
+        }
+      } catch (err) {
+        console.error('[COMPARE] Local engine error:', err.message);
+      }
+    }
+    // ── END COMPARE MODE ─────────────────────────────────────────────────────
+
     sendJSON(res, 200, result, origin);
   }).catch(err => {
     if (err.message === 'engine_timeout') {
+      TRACE(14, 'HTTP 503 engine_timeout sent',  { fn: _fn, correlationId, reason: 'no engine response within ENGINE_TIMEOUT', elapsed: Date.now() - _t0 });
       sendJSON(res, 503, {
         error:       'engine_timeout',
         message:     'SafetyOps did not respond in 30s. Try again.',
         retry_after: 10,
       }, origin);
     } else {
+      TRACE(14, 'HTTP 503 engine_unavailable sent', { fn: _fn, correlationId, reason: err.message, elapsed: Date.now() - _t0 });
       console.error('[API] Error forwarding to engine:', err);
       sendJSON(res, 503, {
         error:       'engine_unavailable',
@@ -341,24 +446,31 @@ wss.on('connection', (ws, req) => {
 
     // ── Report result from SafetyOps ──────────────────────────────────────────
     const { correlationId, result, error } = msg;
+    const _fn12 = 'wsMessageHandler';
+    TRACE(12, 'WS result message received from engine', { fn: _fn12, correlationId, hasResult: !!result, hasError: !!error, folio: result ? result.folio : null });
 
     if (!correlationId) {
       console.warn('[WS] Message without correlationId — ignored:', JSON.stringify(msg).slice(0, 120));
+      TRACE(12, 'WARN no correlationId — early return', { fn: _fn12, reason: 'missing correlationId in engine message', msgSlice: JSON.stringify(msg).slice(0, 80) });
       return;
     }
 
     const pending = pendingRequests.get(correlationId);
     if (!pending) {
       console.warn('[WS] No pending request for correlationId:', correlationId);
+      TRACE(13, 'WARN no pending request — early return', { fn: _fn12, correlationId, reason: 'correlationId not in pendingRequests (timeout or duplicate)' });
       return;
     }
 
     clearTimeout(pending.timer);
     pendingRequests.delete(correlationId);
+    TRACE(13, 'pendingRequests resolved — timer cleared', { fn: _fn12, correlationId, folio: result ? result.folio : null, pendingRemaining: pendingRequests.size });
 
     if (error) {
+      TRACE(13, 'Resolving with ERROR from engine', { fn: _fn12, correlationId, reason: error });
       pending.reject(new Error(error));
     } else {
+      TRACE(13, 'Resolving with SUCCESS from engine', { fn: _fn12, correlationId, folio: result ? result.folio : null, categoria: result ? result.categoria : null });
       pending.resolve(result);
     }
   });

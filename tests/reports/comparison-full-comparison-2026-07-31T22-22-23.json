@@ -1,0 +1,1939 @@
+{
+  "generated": "2026-07-31T22:22:23.504Z",
+  "mode": "full-comparison",
+  "server_url": "http://localhost:3001",
+  "total": 50,
+  "local_ok": 50,
+  "local_err": 0,
+  "ws_ok": 50,
+  "ws_err": 0,
+  "identical": 49,
+  "divergent": 1,
+  "divergence_rate": 0.02,
+  "results": [
+    {
+      "id": 1,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "Bird Strike",
+      "texto_preview": "Durante el despegue se produjo un impacto de ave de gran porte contra el motor n...",
+      "local": {
+        "categoria": "Bird Strike",
+        "nivel_riesgo": "Medio",
+        "severidad": 2,
+        "probabilidad": 3,
+        "confianza": 0.269,
+        "hazards": [
+          "Fauna en área operacional",
+          "Gestión de vida silvestre",
+          "Daño a motores"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1001"
+      },
+      "ws": {
+        "categoria": "Bird Strike",
+        "nivel_riesgo": "Medio",
+        "severidad": 2,
+        "probabilidad": 3,
+        "confianza": 0.269,
+        "hazards": [
+          "Fauna en área operacional",
+          "Gestión de vida silvestre",
+          "Daño a motores"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1001"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 2,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "Bird Strike",
+      "texto_preview": "En fase de aproximacion final una bandada de aves impacto contra el radome y par...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 5,
+        "probabilidad": 3,
+        "confianza": 0.111,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1002"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 5,
+        "probabilidad": 3,
+        "confianza": 0.111,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1002"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 3,
+      "area": "Operaciones de Vuelo",
+      "lang": "en",
+      "categoria_esperada": "Bird Strike",
+      "texto_preview": "Bird strike on both engines shortly after takeoff. Crew declared emergency, perf...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 5,
+        "probabilidad": 2,
+        "confianza": 0.114,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1003"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 5,
+        "probabilidad": 2,
+        "confianza": 0.124,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1003"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 4,
+      "area": "Operaciones en Tierra",
+      "lang": "es",
+      "categoria_esperada": "FOD",
+      "texto_preview": "Durante la inspeccion pre-vuelo el mecanico detecto un objeto extraño en la pist...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.172,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1004"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.172,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1004"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 5,
+      "area": "Operaciones en Tierra",
+      "lang": "es",
+      "categoria_esperada": "FOD",
+      "texto_preview": "Hallazgo de objeto extraño en pista principal. Personal de mantenimiento informo...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.108,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1005"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.108,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1005"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 6,
+      "area": "Control de Tránsito Aéreo",
+      "lang": "es",
+      "categoria_esperada": "Incursión de Pista",
+      "texto_preview": "Un vehiculo de mantenimiento ingreso a la pista activa sin autorizacion ATC mien...",
+      "local": {
+        "categoria": "Incursión de Pista",
+        "nivel_riesgo": "Bajo",
+        "severidad": 2,
+        "probabilidad": 2,
+        "confianza": 0.385,
+        "hazards": [
+          "Coordinación ATC/Torre",
+          "Señalización de pista",
+          "Disciplina de rodaje"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1006"
+      },
+      "ws": {
+        "categoria": "Incursión de Pista",
+        "nivel_riesgo": "Bajo",
+        "severidad": 2,
+        "probabilidad": 2,
+        "confianza": 0.385,
+        "hazards": [
+          "Coordinación ATC/Torre",
+          "Señalización de pista",
+          "Disciplina de rodaje"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1006"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 7,
+      "area": "Control de Tránsito Aéreo",
+      "lang": "es",
+      "categoria_esperada": "Incursión de Pista",
+      "texto_preview": "Incursion de pista por aeronave en rodaje. La aeronave XYZ cruzo el punto de esp...",
+      "local": {
+        "categoria": "Incursión de Pista",
+        "nivel_riesgo": "Bajo",
+        "severidad": 2,
+        "probabilidad": 2,
+        "confianza": 0.647,
+        "hazards": [
+          "Coordinación ATC/Torre",
+          "Señalización de pista",
+          "Disciplina de rodaje"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": false,
+        "folio": "OCC-1007"
+      },
+      "ws": {
+        "categoria": "Incursión de Pista",
+        "nivel_riesgo": "Bajo",
+        "severidad": 2,
+        "probabilidad": 2,
+        "confianza": 0.647,
+        "hazards": [
+          "Coordinación ATC/Torre",
+          "Señalización de pista",
+          "Disciplina de rodaje"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": false,
+        "folio": "OCC-1007"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 8,
+      "area": "Operaciones en Tierra",
+      "lang": "en",
+      "categoria_esperada": "Incursión de Pista",
+      "texto_preview": "A ground vehicle entered the active runway without ATC clearance while an aircra...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.115,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1008"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.115,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1008"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 9,
+      "area": "Cabina",
+      "lang": "es",
+      "categoria_esperada": "Smoke / Fumes",
+      "texto_preview": "La tripulacion de cabina reporto olor a humo en la cabina de pasajeros durante e...",
+      "local": {
+        "categoria": "Smoke / Humo a Bordo",
+        "nivel_riesgo": "Alto",
+        "severidad": 4,
+        "probabilidad": 4,
+        "confianza": 0.267,
+        "hazards": [
+          "Sistemas eléctricos",
+          "Mantenimiento preventivo",
+          "Detección temprana"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1009"
+      },
+      "ws": {
+        "categoria": "Smoke / Humo a Bordo",
+        "nivel_riesgo": "Alto",
+        "severidad": 4,
+        "probabilidad": 4,
+        "confianza": 0.267,
+        "hazards": [
+          "Sistemas eléctricos",
+          "Mantenimiento preventivo",
+          "Detección temprana"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1009"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 10,
+      "area": "Cabina",
+      "lang": "es",
+      "categoria_esperada": "Smoke / Fumes",
+      "texto_preview": "Deteccion de vapores y humo en la bodega delantera. El sistema de deteccion de i...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 5,
+        "probabilidad": 3,
+        "confianza": 0.135,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1010"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 5,
+        "probabilidad": 3,
+        "confianza": 0.135,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1010"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 11,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "Engine Fire",
+      "texto_preview": "Alarma de incendio en motor izquierdo activada durante el crucero. La tripulacio...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 5,
+        "probabilidad": 3,
+        "confianza": 0.351,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1011"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 5,
+        "probabilidad": 3,
+        "confianza": 0.351,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1011"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 12,
+      "area": "Operaciones de Vuelo",
+      "lang": "en",
+      "categoria_esperada": "Engine Fire",
+      "texto_preview": "Engine fire warning light illuminated during climb phase. Crew executed engine f...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 5,
+        "probabilidad": 2,
+        "confianza": 0.155,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1012"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 5,
+        "probabilidad": 2,
+        "confianza": 0.22,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1012"
+      },
+      "diffs": [
+        {
+          "field": "confianza",
+          "local": 0.155,
+          "ws": 0.22
+        }
+      ],
+      "match": false
+    },
+    {
+      "id": 13,
+      "area": "Cabina",
+      "lang": "es",
+      "categoria_esperada": "Smoke / Fumes",
+      "texto_preview": "Incendio en el lavabo de la aeronave causado por material inflamable depositado ...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 5,
+        "probabilidad": 2,
+        "confianza": 0.114,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1013"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 5,
+        "probabilidad": 2,
+        "confianza": 0.114,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1013"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 14,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "Fatiga de Tripulacion",
+      "texto_preview": "El primer oficial reporto niveles de fatiga elevados al inicio del turno. Habia ...",
+      "local": {
+        "categoria": "Fatiga de Tripulación",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.22,
+        "hazards": [
+          "Gestión del riesgo de fatiga (FRMS)",
+          "Cumplimiento FDP/FTL",
+          "Cultura de reporte de fatiga"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1014"
+      },
+      "ws": {
+        "categoria": "Fatiga de Tripulación",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.22,
+        "hazards": [
+          "Gestión del riesgo de fatiga (FRMS)",
+          "Cumplimiento FDP/FTL",
+          "Cultura de reporte de fatiga"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1014"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 15,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "Fatiga de Tripulacion",
+      "texto_preview": "La tripulacion reporto microsueños durante la fase de crucero nocturno. Ambos pi...",
+      "local": {
+        "categoria": "Fatiga de Tripulación",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.338,
+        "hazards": [
+          "Gestión del riesgo de fatiga (FRMS)",
+          "Cumplimiento FDP/FTL",
+          "Cultura de reporte de fatiga"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1015"
+      },
+      "ws": {
+        "categoria": "Fatiga de Tripulación",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.338,
+        "hazards": [
+          "Gestión del riesgo de fatiga (FRMS)",
+          "Cumplimiento FDP/FTL",
+          "Cultura de reporte de fatiga"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1015"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 16,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "Factores Humanos",
+      "texto_preview": "El piloto omitio completar el checklist de aproximacion debido a la alta carga d...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.112,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1016"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.112,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1016"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 17,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "Factores Humanos",
+      "texto_preview": "Falla de comunicacion entre capitan y primer oficial durante fase critica del de...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.066,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1017"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.066,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1017"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 18,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "Factores Humanos",
+      "texto_preview": "El controlador de trafico aereo programo incorrectamente el nivel de vuelo en el...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.153,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1018"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.153,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1018"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 19,
+      "area": "Mantenimiento",
+      "lang": "es",
+      "categoria_esperada": "Factores Humanos",
+      "texto_preview": "Tecnico de mantenimiento instalo un filtro de aceite incorrecto por confusion en...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.127,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1019"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.127,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1019"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 20,
+      "area": "Cabina",
+      "lang": "es",
+      "categoria_esperada": "Factores Humanos",
+      "texto_preview": "La azafata senior no brindo el briefing de seguridad obligatorio antes del despe...",
+      "local": {
+        "categoria": "Factores Humanos",
+        "nivel_riesgo": "Medio",
+        "severidad": 2,
+        "probabilidad": 3,
+        "confianza": 0.397,
+        "hazards": [
+          "Fatiga",
+          "Comunicación / CRM",
+          "Carga de trabajo"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1020"
+      },
+      "ws": {
+        "categoria": "Factores Humanos",
+        "nivel_riesgo": "Medio",
+        "severidad": 2,
+        "probabilidad": 3,
+        "confianza": 0.397,
+        "hazards": [
+          "Fatiga",
+          "Comunicación / CRM",
+          "Carga de trabajo"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1020"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 21,
+      "area": "Seguridad Aeroportuaria",
+      "lang": "es",
+      "categoria_esperada": "Seguridad Aeroportuaria",
+      "texto_preview": "Pasajero perturbador y violento en cabina durante el vuelo. El individuo agredio...",
+      "local": {
+        "categoria": "Seguridad Aeroportuaria",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.39,
+        "hazards": [],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1021"
+      },
+      "ws": {
+        "categoria": "Seguridad Aeroportuaria",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.39,
+        "hazards": [],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1021"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 22,
+      "area": "Seguridad Aeroportuaria",
+      "lang": "es",
+      "categoria_esperada": "Seguridad Aeroportuaria",
+      "texto_preview": "Amenaza de bomba recibida por la torre de control afectando a la aeronave en apr...",
+      "local": {
+        "categoria": "Seguridad Aeroportuaria",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.473,
+        "hazards": [],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1022"
+      },
+      "ws": {
+        "categoria": "Seguridad Aeroportuaria",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.473,
+        "hazards": [],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1022"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 23,
+      "area": "Seguridad Aeroportuaria",
+      "lang": "es",
+      "categoria_esperada": "Seguridad Aeroportuaria",
+      "texto_preview": "Deteccion de arma de fuego en equipaje de mano durante control de seguridad. El ...",
+      "local": {
+        "categoria": "Seguridad Aeroportuaria",
+        "nivel_riesgo": "Alto",
+        "severidad": 5,
+        "probabilidad": 3,
+        "confianza": 0.22,
+        "hazards": [],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1023"
+      },
+      "ws": {
+        "categoria": "Seguridad Aeroportuaria",
+        "nivel_riesgo": "Alto",
+        "severidad": 5,
+        "probabilidad": 3,
+        "confianza": 0.22,
+        "hazards": [],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1023"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 24,
+      "area": "Mantenimiento",
+      "lang": "es",
+      "categoria_esperada": "Falla Técnica",
+      "texto_preview": "Falla del sistema hidraulico principal durante el vuelo atribuida a la instalaci...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.576,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1024"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.576,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1024"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 25,
+      "area": "Mantenimiento",
+      "lang": "es",
+      "categoria_esperada": "Falla Técnica",
+      "texto_preview": "Error de mantenimiento en el sistema de oxigeno de la tripulacion. La mascara de...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.112,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1025"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.112,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1025"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 26,
+      "area": "Mantenimiento",
+      "lang": "es",
+      "categoria_esperada": "Falla Técnica",
+      "texto_preview": "Inspeccion de mantenimiento omitida en el sistema de frenos principales. El tecn...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.106,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1026"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.106,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1026"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 27,
+      "area": "Control de Tránsito Aéreo",
+      "lang": "es",
+      "categoria_esperada": "Error ATC",
+      "texto_preview": "El controlador de trafico aereo autorizo dos aeronaves al mismo nivel de vuelo e...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.119,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1027"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.119,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1027"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 28,
+      "area": "Control de Tránsito Aéreo",
+      "lang": "es",
+      "categoria_esperada": "Error ATC",
+      "texto_preview": "Instruccion erronea de ATC envio a la aeronave a un nivel de vuelo ocupado por o...",
+      "local": {
+        "categoria": "Incidencia ATC",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.22,
+        "hazards": [
+          "Comunicación ATC/tripulación",
+          "Fraseología estándar",
+          "Separación de tráfico aéreo"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1028"
+      },
+      "ws": {
+        "categoria": "Incidencia ATC",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.22,
+        "hazards": [
+          "Comunicación ATC/tripulación",
+          "Fraseología estándar",
+          "Separación de tráfico aéreo"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1028"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 29,
+      "area": "Control de Tránsito Aéreo",
+      "lang": "es",
+      "categoria_esperada": "Error ATC",
+      "texto_preview": "El controlador autorizo el despegue de una aeronave sin verificar que la pista e...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.151,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1029"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.151,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1029"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 30,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "Turbulencia",
+      "texto_preview": "La aeronave experimento turbulencia severa a FL370 sin previo aviso por turbulen...",
+      "local": {
+        "categoria": "Turbulencia",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.226,
+        "hazards": [
+          "Meteorología en ruta",
+          "Uso de cinturón",
+          "Turbulencia severa"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1030"
+      },
+      "ws": {
+        "categoria": "Turbulencia",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.226,
+        "hazards": [
+          "Meteorología en ruta",
+          "Uso de cinturón",
+          "Turbulencia severa"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1030"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 31,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "Turbulencia",
+      "texto_preview": "Viento cizallante severo en aproximacion final causo perdida de velocidad de mas...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.084,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1031"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.084,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1031"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 32,
+      "area": "Operaciones de Vuelo",
+      "lang": "en",
+      "categoria_esperada": "Turbulencia",
+      "texto_preview": "Severe icing conditions encountered during cruise at FL280. Ice accumulation exc...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.126,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1032"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.159,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1032"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 33,
+      "area": "Operaciones en Tierra",
+      "lang": "es",
+      "categoria_esperada": "Bird Strike",
+      "texto_preview": "Coyote detectado en pista principal durante las operaciones nocturnas. El contro...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.081,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1033"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.081,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1033"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 34,
+      "area": "Operaciones en Tierra",
+      "lang": "es",
+      "categoria_esperada": "Bird Strike",
+      "texto_preview": "Presencia de bandada de aves en area de maniobras reportada por tripulacion de a...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.134,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1034"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.134,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1034"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 35,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "Falla Técnica",
+      "texto_preview": "Error en el calculo de combustible para el vuelo. El despachador utilizo un fact...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.118,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1035"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.118,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1035"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 36,
+      "area": "Mantenimiento",
+      "lang": "es",
+      "categoria_esperada": "Falla Técnica",
+      "texto_preview": "Contaminacion de combustible detectada durante la inspeccion pre-vuelo. El opera...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.361,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1036"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.361,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1036"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 37,
+      "area": "Cabina",
+      "lang": "es",
+      "categoria_esperada": "Factores Humanos",
+      "texto_preview": "Evacuacion de emergencia iniciada por decision unilateral de una azafata sin coo...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 4,
+        "probabilidad": 3,
+        "confianza": 0.148,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1037"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 4,
+        "probabilidad": 3,
+        "confianza": 0.148,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1037"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 38,
+      "area": "Cabina",
+      "lang": "es",
+      "categoria_esperada": "Falla Técnica",
+      "texto_preview": "Falla del sistema de mascaras de oxigeno en la cabina de pasajeros. Al efectuars...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.22,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1038"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.22,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1038"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 39,
+      "area": "Seguridad Aeroportuaria",
+      "lang": "es",
+      "categoria_esperada": "Seguridad Aeroportuaria",
+      "texto_preview": "Acceso no autorizado al area de plataforma por persona sin credencial. El indivi...",
+      "local": {
+        "categoria": "Seguridad Aeroportuaria",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.377,
+        "hazards": [],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1039"
+      },
+      "ws": {
+        "categoria": "Seguridad Aeroportuaria",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.377,
+        "hazards": [],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1039"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 40,
+      "area": "Despacho",
+      "lang": "es",
+      "categoria_esperada": "Mercancías Peligrosas",
+      "texto_preview": "Carga de mercancias peligrosas clase 3 lquidos inflamables transportada sin la d...",
+      "local": {
+        "categoria": "Mercancías Peligrosas",
+        "nivel_riesgo": "Medio",
+        "severidad": 4,
+        "probabilidad": 2,
+        "confianza": 0.293,
+        "hazards": [
+          "Declaración incorrecta / omitida",
+          "Embalaje y etiquetado DGR",
+          "Capacitación DGR de personal"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1040"
+      },
+      "ws": {
+        "categoria": "Mercancías Peligrosas",
+        "nivel_riesgo": "Medio",
+        "severidad": 4,
+        "probabilidad": 2,
+        "confianza": 0.293,
+        "hazards": [
+          "Declaración incorrecta / omitida",
+          "Embalaje y etiquetado DGR",
+          "Capacitación DGR de personal"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1040"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 41,
+      "area": "Despacho",
+      "lang": "es",
+      "categoria_esperada": "Mercancías Peligrosas",
+      "texto_preview": "Pasajero intento embarcar con baterias de litio de alta capacidad no declaradas ...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 4,
+        "probabilidad": 2,
+        "confianza": 0.151,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1041"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 4,
+        "probabilidad": 2,
+        "confianza": 0.151,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1041"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 42,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "CFIT",
+      "texto_preview": "Alarma GPWS activada en aproximacion al aeropuerto de montana. La aeronave desce...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.159,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1042"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.159,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1042"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 43,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "CFIT",
+      "texto_preview": "Alerta de proximidad al terreno TAWS activada durante el descenso nocturno. El e...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.154,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1043"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.154,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1043"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 44,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "TCAS RA",
+      "texto_preview": "El sistema TCAS emitio una alerta de resolucion RA de descenso durante el crucer...",
+      "local": {
+        "categoria": "TCAS RA",
+        "nivel_riesgo": "Medio",
+        "severidad": 2,
+        "probabilidad": 3,
+        "confianza": 0.22,
+        "hazards": [
+          "Separación de tránsito aéreo",
+          "Coordinación ATC",
+          "Error de control de tráfico"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1044"
+      },
+      "ws": {
+        "categoria": "TCAS RA",
+        "nivel_riesgo": "Medio",
+        "severidad": 2,
+        "probabilidad": 3,
+        "confianza": 0.22,
+        "hazards": [
+          "Separación de tránsito aéreo",
+          "Coordinación ATC",
+          "Error de control de tráfico"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1044"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 45,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "TCAS RA",
+      "texto_preview": "Activacion de TCAS RA en zona de alta densidad de trafico. La aeronave recibio i...",
+      "local": {
+        "categoria": "TCAS RA",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.22,
+        "hazards": [
+          "Separación de tránsito aéreo",
+          "Coordinación ATC",
+          "Error de control de tráfico"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1045"
+      },
+      "ws": {
+        "categoria": "TCAS RA",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 3,
+        "confianza": 0.22,
+        "hazards": [
+          "Separación de tránsito aéreo",
+          "Coordinación ATC",
+          "Error de control de tráfico"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1045"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 46,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "Hard Landing",
+      "texto_preview": "Aterrizaje brusco con tasa de descenso superior a 600 pies por minuto al tocar p...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.137,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1046"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.137,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1046"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 47,
+      "area": "Operaciones en Tierra",
+      "lang": "es",
+      "categoria_esperada": "Ground Damage",
+      "texto_preview": "El tractor de remolque colisiono con el tren de nariz de la aeronave durante la ...",
+      "local": {
+        "categoria": "Ground Damage",
+        "nivel_riesgo": "Medio",
+        "severidad": 2,
+        "probabilidad": 3,
+        "confianza": 0.407,
+        "hazards": [
+          "Operaciones de rampa",
+          "Seguridad en plataforma",
+          "Visibilidad limitada"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1047"
+      },
+      "ws": {
+        "categoria": "Ground Damage",
+        "nivel_riesgo": "Medio",
+        "severidad": 2,
+        "probabilidad": 3,
+        "confianza": 0.407,
+        "hazards": [
+          "Operaciones de rampa",
+          "Seguridad en plataforma",
+          "Visibilidad limitada"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1047"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 48,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "Presurización",
+      "texto_preview": "Falla del sistema de presurizacion durante el crucero a FL380. La presion de cab...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 4,
+        "probabilidad": 3,
+        "confianza": 0.351,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1048"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 4,
+        "probabilidad": 3,
+        "confianza": 0.351,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1048"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 49,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "Estela Turbulenta",
+      "texto_preview": "La aeronave experimento una perturbacion severa causada por la estela turbulenta...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.153,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1049"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Medio",
+        "severidad": 3,
+        "probabilidad": 2,
+        "confianza": 0.153,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1049"
+      },
+      "diffs": [],
+      "match": true
+    },
+    {
+      "id": 50,
+      "area": "Operaciones de Vuelo",
+      "lang": "es",
+      "categoria_esperada": "Factores Humanos",
+      "texto_preview": "La tripulacion continuo una aproximacion inestable por debajo del gate de estabi...",
+      "local": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 3,
+        "probabilidad": 5,
+        "confianza": 0.166,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1050"
+      },
+      "ws": {
+        "categoria": "Falla Técnica",
+        "nivel_riesgo": "Alto",
+        "severidad": 3,
+        "probabilidad": 5,
+        "confianza": 0.166,
+        "hazards": [
+          "Mantenimiento",
+          "Confiabilidad de sistemas",
+          "Detección de falla"
+        ],
+        "recomendaciones": [],
+        "requiere_validacion": true,
+        "folio": "OCC-1050"
+      },
+      "diffs": [],
+      "match": true
+    }
+  ]
+}
