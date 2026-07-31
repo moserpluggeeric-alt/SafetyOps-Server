@@ -16,6 +16,7 @@ RUN npm ci --only=production && npm cache clean --force
 
 # Copy application code
 COPY safetyops-server.js ./
+COPY analysis-engine/ ./analysis-engine/
 
 # Switch to non-root user
 USER safetyops
