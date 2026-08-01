@@ -101,6 +101,15 @@ let engineSocket = null;
 let _nextReportId = 1;
 
 /**
+ * Reports received from Mobile and analysed by the local engine.
+ * Temporary in-memory store (max 500). Cleared on server restart.
+ * Replace with a persistent DB in a future iteration — no other code depends on this array.
+ * @type {Array<Object>}
+ */
+const _storedReports = [];
+const _STORED_REPORTS_MAX = 500;
+
+/**
  * Pending HTTP requests awaiting a SafetyOps response.
  * Map<correlationId, { resolve, reject, timer }>
  */
@@ -250,6 +259,47 @@ async function handlePostReport(req, res, origin) {
         geo:       body.geo || null,
       });
       TRACE(14, 'LOCAL ENGINE — HTTP 200 sent',   { fn: _fn, correlationId, folio: localResult.folio, categoria: localResult.categoria, elapsed: Date.now() - _t0 });
+
+      // ── Store + WS push to SafetyOps_v2 ────────────────────────────────────
+      // Build occ object matching S.ocurrencias schema used by SafetyOps_v2.html
+      const _ts = localResult.timestamp || new Date().toISOString();
+      const _occ = {
+        id:                  _nextReportId - 1,
+        folio:               localResult.folio,
+        fecha:               _ts.slice(0, 10),
+        texto:               body.texto.trim(),
+        categoria:           localResult.categoria,
+        hazards:             localResult.hazards || [],
+        severidad:           localResult.severidad,
+        probabilidad:        localResult.probabilidad,
+        nivel_riesgo:        localResult.nivel_riesgo,
+        confianza:           localResult.confianza,
+        requiere_validacion: localResult.requiere_validacion ? 1 : 0,
+        estado:              'Reportada',
+        area:                body.area,
+        origen:              'Reporte Móvil',
+        fase:                (localResult._ner && localResult._ner.fase) || '',
+        matricula:           (localResult._ner && localResult._ner.matricula) || '',
+        vuelo:               (localResult._ner && localResult._ner.vuelo) || '',
+        _anonimo:            (!body.identidad || body.identidad === 'anonimo') ? true : undefined,
+        _geo:                body.geo || undefined,
+        _evidencias:         [],
+        _fromMobile:         true,   // flag: came from SafetyOps Mobile via Railway
+      };
+      // Persist in memory (cap at max)
+      _storedReports.unshift(_occ);
+      if (_storedReports.length > _STORED_REPORTS_MAX) _storedReports.length = _STORED_REPORTS_MAX;
+      // Real-time push to SafetyOps_v2 if it is connected
+      if (isEngineConnected()) {
+        try {
+          engineSocket.send(JSON.stringify({ type: 'new_report', data: _occ }));
+          console.log('[push] new_report sent to SafetyOps_v2 — folio=' + _occ.folio);
+        } catch (pushErr) {
+          console.warn('[push] WS send failed:', pushErr.message);
+        }
+      }
+      // ── END Store + WS push ─────────────────────────────────────────────────
+
       return sendJSON(res, 200, localResult, origin);
     } catch (err) {
       console.error('[engine] Local engine error:', err);
@@ -503,6 +553,16 @@ function registerEngine(ws, origin) {
   ws._lastPong = Date.now();
 
   console.log(`[WS] ✅ SafetyOps engine registered — ${origin}`);
+
+  // Send any reports that arrived while SafetyOps_v2 was not connected
+  if (_storedReports.length > 0) {
+    try {
+      ws.send(JSON.stringify({ type: 'stored_reports', data: _storedReports }));
+      console.log('[push] stored_reports sent — count=' + _storedReports.length);
+    } catch (e) {
+      console.warn('[push] Could not send stored_reports:', e.message);
+    }
+  }
 
   // Protocol-level ping (browser responds with pong frame automatically)
   // Application-level ping (SafetyOps JS responds with {"type":"pong"})
