@@ -92,6 +92,47 @@ const AREAS = [
 const IDENTIDADES      = ['anonimo', 'usuario'];
 const MAX_TEXTO_LENGTH = 10_000;
 
+// ── Pilot Mode: Default values applied when fields are missing ────────────────
+const REPORT_DEFAULTS = {
+  area:      'Otro',
+  identidad: 'anonimo',
+  lang:      'es',
+  fuente:    'mobile',
+  categoria: null,
+  estado:    'Reportada',
+  prioridad: 'normal',
+  geo:       null,
+};
+
+/**
+ * normalizeReport(raw)
+ *
+ * Unifies field aliases and applies REPORT_DEFAULTS for any missing fields.
+ * Only hard rule: the resolved `texto` must not be empty after trim().
+ *
+ * Alias resolution (first non-empty wins):
+ *   texto ← raw.texto | raw.descripcion | raw.description
+ *
+ * Returns { ok: true, report } or { ok: false, error }
+ */
+function normalizeReport(raw) {
+  const texto = (raw.texto || raw.descripcion || raw.description || '').trim();
+  if (!texto) {
+    return { ok: false, error: 'El campo texto no puede estar vacío.' };
+  }
+  if (texto.length > MAX_TEXTO_LENGTH) {
+    return { ok: false, error: `texto no puede superar ${MAX_TEXTO_LENGTH} caracteres.` };
+  }
+  const report = {
+    ...REPORT_DEFAULTS,
+    ...raw,
+    texto,               // always use the resolved + trimmed value
+    _normalized: true,
+    _pilot_defaults: true,
+  };
+  return { ok: true, report };
+}
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
 /** The single authenticated WebSocket from SafetyOps_v2.html. */
@@ -217,31 +258,20 @@ async function handlePostReport(req, res, origin) {
   let body;
   try {
     body = JSON.parse(raw);
-    TRACE( 3, 'JSON parse OK',                  { fn: _fn, keys: Object.keys(body), textoLen: body.texto ? body.texto.length : 0, area: body.area, identidad: body.identidad, elapsed: Date.now() - _t0 });
+    TRACE( 3, 'JSON parse OK',                  { fn: _fn, keys: Object.keys(body), textoLen: report.texto ? report.texto.length : 0, area: report.area, identidad: report.identidad, elapsed: Date.now() - _t0 });
   } catch (err) {
     TRACE( 3, 'ERROR JSON parse failed — early return 400', { fn: _fn, reason: err.message, rawSlice: raw.slice(0, 100), elapsed: Date.now() - _t0 });
     return sendJSON(res, 400, { error: 'invalid_json', message: 'Request body must be valid JSON.' }, origin);
   }
 
-  // Validate
-  const errors = [];
-  if (typeof body.texto !== 'string' || body.texto.trim().length < 10) {
-    errors.push('texto must be at least 10 characters');
+  // Normalize + validate (only hard rule: texto must not be empty)
+  const normalized = normalizeReport(body);
+  if (!normalized.ok) {
+    TRACE( 4, 'VALIDATION FAILED — early return 400', { fn: _fn, reason: normalized.error, elapsed: Date.now() - _t0 });
+    return sendJSON(res, 400, { error: 'validation_error', message: normalized.error }, origin);
   }
-  if (body.texto && body.texto.length > MAX_TEXTO_LENGTH) {
-    errors.push(`texto must not exceed ${MAX_TEXTO_LENGTH} characters`);
-  }
-  if (!body.area || !AREAS.includes(body.area)) {
-    errors.push(`area is required and must be one of: ${AREAS.join(', ')}`);
-  }
-  if (body.identidad && !IDENTIDADES.includes(body.identidad)) {
-    errors.push(`identidad must be one of: ${IDENTIDADES.join(', ')}`);
-  }
-  if (errors.length > 0) {
-    TRACE( 4, 'VALIDATION FAILED — early return 400', { fn: _fn, reason: 'field validation errors', errors, elapsed: Date.now() - _t0 });
-    return sendJSON(res, 400, { error: 'validation_error', fields: errors }, origin);
-  }
-  TRACE( 4, 'Validation OK',                    { fn: _fn, texto_len: body.texto.trim().length, area: body.area, identidad: body.identidad || 'anonimo', elapsed: Date.now() - _t0 });
+  const report = normalized.report;
+  TRACE( 4, 'Validation OK (normalized)',        { fn: _fn, texto_len: report.texto.length, area: report.area, identidad: report.identidad, _pilot_defaults: true, elapsed: Date.now() - _t0 });
 
   // ── LOCAL ENGINE PATH ──────────────────────────────────────────────────────
   // Active when USE_LOCAL_ENGINE=true. Skips WebSocket entirely.
@@ -250,13 +280,13 @@ async function handlePostReport(req, res, origin) {
     TRACE( 7, 'correlationId generated (LOCAL)',  { fn: _fn, correlationId, elapsed: Date.now() - _t0 });
     try {
       const localResult = _engine.analyzeReport({
-        texto:     body.texto.trim(),
-        area:      body.area,
-        identidad: body.identidad || 'anonimo',
-        lang:      body.lang || 'es',
+        texto:     report.texto,
+        area:      report.area,
+        identidad: report.identidad,
+        lang:      report.lang,
         nextId:    _nextReportId++,
         timestamp: new Date().toISOString(),
-        geo:       body.geo || null,
+        geo:       report.geo,
       });
       TRACE(14, 'LOCAL ENGINE — HTTP 200 sent',   { fn: _fn, correlationId, folio: localResult.folio, categoria: localResult.categoria, elapsed: Date.now() - _t0 });
 
@@ -267,7 +297,7 @@ async function handlePostReport(req, res, origin) {
         id:                  _nextReportId - 1,
         folio:               localResult.folio,
         fecha:               _ts.slice(0, 10),
-        texto:               body.texto.trim(),
+        texto:               report.texto,
         categoria:           localResult.categoria,
         hazards:             localResult.hazards || [],
         severidad:           localResult.severidad,
@@ -276,13 +306,13 @@ async function handlePostReport(req, res, origin) {
         confianza:           localResult.confianza,
         requiere_validacion: localResult.requiere_validacion ? 1 : 0,
         estado:              'Reportada',
-        area:                body.area,
+        area:                report.area,
         origen:              'Reporte Móvil',
         fase:                (localResult._ner && localResult._ner.fase) || '',
         matricula:           (localResult._ner && localResult._ner.matricula) || '',
         vuelo:               (localResult._ner && localResult._ner.vuelo) || '',
-        _anonimo:            (!body.identidad || body.identidad === 'anonimo') ? true : undefined,
-        _geo:                body.geo || undefined,
+        _anonimo:            (!report.identidad || report.identidad === 'anonimo') ? true : undefined,
+        _geo:                report.geo || undefined,
         _evidencias:         [],
         _fromMobile:         true,   // flag: came from SafetyOps Mobile via Railway
       };
@@ -314,12 +344,12 @@ async function handlePostReport(req, res, origin) {
     correlationId,
     type: 'report',
     payload: {
-      texto:      body.texto.trim(),
-      area:       body.area,
-      identidad:  body.identidad || 'anonimo',
-      lang:       body.lang || 'es',
+      texto:      report.texto,
+      area:       report.area,
+      identidad:  report.identidad,
+      lang:       report.lang,
       usuario_id: body.usuario_id || null,
-      geo:        body.geo || null,
+      geo:        report.geo,
       timestamp:  new Date().toISOString(),
     },
   });
@@ -353,13 +383,13 @@ async function handlePostReport(req, res, origin) {
     if (COMPARE_MODE && _engine && result) {
       try {
         const localResult = _engine.analyzeReport({
-          texto:     body.texto.trim(),
-          area:      body.area,
-          identidad: body.identidad || 'anonimo',
-          lang:      body.lang || 'es',
+          texto:     report.texto,
+          area:      report.area,
+          identidad: report.identidad,
+          lang:      report.lang,
           nextId:    _nextReportId++,
           timestamp: new Date().toISOString(),
-          geo:       body.geo || null,
+          geo:       report.geo,
         });
         const match = localResult.categoria === result.categoria &&
                       localResult.nivel_riesgo === result.nivel_riesgo;
