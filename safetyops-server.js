@@ -34,21 +34,24 @@ const DB_PATH = (() => {
   return path.join(vol, 'reports.db');
 })();
 
-let Database;
+let sqlite3Mod;
 try {
-  Database = require('better-sqlite3');
+  sqlite3Mod = require('sqlite3').verbose();
 } catch (e) {
-  console.error('[DB] FATAL: better-sqlite3 not found. Run: npm install better-sqlite3');
+  console.error('[DB] FATAL: sqlite3 not found. Run: npm install sqlite3');
   process.exit(1);
 }
 
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');   // safe concurrent reads while writing
-db.pragma('foreign_keys = ON');
+const db = new sqlite3Mod.Database(DB_PATH, (err) => {
+  if (err) { console.error('[DB] Open error:', err.message); process.exit(1); }
+  console.log('[DB] SQLite ready at ' + DB_PATH);
+});
 
-// Schema — idempotent, safe to run on every start
-db.exec(`
-  CREATE TABLE IF NOT EXISTS reports (
+// WAL mode + schema — serialized so schema runs after pragmas
+db.serialize(() => {
+  db.run('PRAGMA journal_mode = WAL');
+  db.run('PRAGMA foreign_keys = ON');
+  db.run(`CREATE TABLE IF NOT EXISTS reports (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     folio       TEXT    NOT NULL,
     timestamp   TEXT    NOT NULL,
@@ -63,59 +66,37 @@ db.exec(`
     status      TEXT    DEFAULT 'Reportada',
     source      TEXT    DEFAULT 'mobile',
     raw_json    TEXT    NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS idx_reports_timestamp ON reports(timestamp);
-  CREATE INDEX IF NOT EXISTS idx_reports_folio     ON reports(folio);
-  CREATE INDEX IF NOT EXISTS idx_reports_category  ON reports(category);
-`);
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_reports_timestamp ON reports(timestamp)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_reports_folio     ON reports(folio)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_reports_category  ON reports(category)');
+});
 
-console.log('[DB] SQLite ready at ' + DB_PATH);
-
-// Prepared statements — compiled once, reused on every call
-const stmtInsert = db.prepare(`
-  INSERT INTO reports
+/** Persist one report — fire and forget, errors logged only. */
+function dbSaveReport(occ) {
+  const sql = `INSERT INTO reports
     (folio, timestamp, airport, sector, title, description,
      risk, severity, probability, category, status, source, raw_json)
-  VALUES
-    (@folio, @timestamp, @airport, @sector, @title, @description,
-     @risk, @severity, @probability, @category, @status, @source, @raw_json)
-`);
-
-const stmtSelectPage = db.prepare(`
-  SELECT id, folio, timestamp, airport, sector, title, description,
-         risk, severity, probability, category, status, source
-  FROM   reports
-  WHERE  (@since IS NULL OR timestamp >= @since)
-  ORDER  BY timestamp DESC
-  LIMIT  @limit
-`);
-
-const stmtPurge = db.prepare(
-  `DELETE FROM reports WHERE timestamp < datetime('now', '-7 days')`
-);
-
-/** Persist one report. Accepts the _occ object already built in handlePostReport. */
-function dbSaveReport(occ) {
-  try {
-    stmtInsert.run({
-      folio:       occ.folio       || '',
-      timestamp:   occ.fecha       ? occ.fecha + 'T00:00:00Z' : new Date().toISOString(),
-      airport:     occ.aeropuerto  || null,
-      sector:      occ.sector      || null,
-      title:       occ.titulo      || null,
-      description: occ.texto       || '',
-      risk:        occ.nivel_riesgo || null,
-      severity:    occ.severidad   || null,
-      probability: occ.probabilidad || null,
-      category:    occ.categoria   || null,
-      status:      occ.estado      || 'Reportada',
-      source:      occ._fromMobile ? 'mobile' : 'web',
-      raw_json:    JSON.stringify(occ),
-    });
-    console.log('[DB] Saved report folio=' + occ.folio);
-  } catch (err) {
-    console.error('[DB] Insert error:', err.message);
-  }
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+  const params = [
+    occ.folio        || '',
+    occ.fecha        ? occ.fecha + 'T00:00:00Z' : new Date().toISOString(),
+    occ.aeropuerto   || null,
+    occ.sector       || null,
+    occ.titulo       || null,
+    occ.texto        || '',
+    occ.nivel_riesgo || null,
+    occ.severidad    || null,
+    occ.probabilidad || null,
+    occ.categoria    || null,
+    occ.estado       || 'Reportada',
+    occ._fromMobile  ? 'mobile' : 'web',
+    JSON.stringify(occ),
+  ];
+  db.run(sql, params, function(err) {
+    if (err) console.error('[DB] Insert error:', err.message);
+    else console.log('[DB] Saved report folio=' + occ.folio + ' id=' + this.lastID);
+  });
 }
 
 // ── API Key middleware ────────────────────────────────────────────────────────
@@ -136,12 +117,13 @@ function requireApiKey(req, res, origin) {
 
 // ── 7-day purge — runs every 24 h ────────────────────────────────────────────
 setInterval(() => {
-  try {
-    const info = stmtPurge.run();
-    console.log('[DB] Purge: ' + info.changes + ' reportes eliminados (>7 días)');
-  } catch (err) {
-    console.error('[DB] Purge error:', err.message);
-  }
+  db.run(
+    `DELETE FROM reports WHERE timestamp < datetime('now', '-7 days')`,
+    function(err) {
+      if (err) console.error('[DB] Purge error:', err.message);
+      else console.log('[DB] Purge: ' + this.changes + ' reportes eliminados (>7 días)');
+    }
+  );
 }, 24 * 60 * 60 * 1000);
 
 // ── Configuration ─────────────────────────────────────────────────────────────
@@ -346,16 +328,24 @@ function handleHealth(res, origin) {
 }
 
 function handleGetReports(req, res, origin) {
-  const urlObj  = new URL(req.url, 'http://localhost');
-  const limit   = Math.min(parseInt(urlObj.searchParams.get('limit') || '100', 10), 500);
-  const since   = urlObj.searchParams.get('since') || null; // ISO date e.g. 2026-08-01
-  try {
-    const rows = stmtSelectPage.all({ limit, since });
+  const urlObj = new URL(req.url, 'http://localhost');
+  const limit  = Math.min(parseInt(urlObj.searchParams.get('limit') || '100', 10), 500);
+  const since  = urlObj.searchParams.get('since') || null;
+  const sql    = since
+    ? `SELECT id, folio, timestamp, airport, sector, title, description,
+              risk, severity, probability, category, status, source
+       FROM reports WHERE timestamp >= ? ORDER BY timestamp DESC LIMIT ?`
+    : `SELECT id, folio, timestamp, airport, sector, title, description,
+              risk, severity, probability, category, status, source
+       FROM reports ORDER BY timestamp DESC LIMIT ?`;
+  const params = since ? [since, limit] : [limit];
+  db.all(sql, params, (err, rows) => {
+    if (err) {
+      console.error('[DB] GET /api/v1/reports error:', err.message);
+      return sendJSON(res, 500, { error: 'db_error', message: err.message }, origin);
+    }
     sendJSON(res, 200, { ok: true, count: rows.length, reports: rows }, origin);
-  } catch (err) {
-    console.error('[DB] GET /api/v1/reports error:', err.message);
-    sendJSON(res, 500, { error: 'db_error', message: err.message }, origin);
-  }
+  });
 }
 
 function handleConfig(res, origin) {
