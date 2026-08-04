@@ -17,7 +17,132 @@
 
 const http   = require('http');
 const crypto = require('crypto');
+const fs     = require('fs');
+const path   = require('path');
 const { WebSocketServer } = require('ws');
+
+// ── SQLite Persistence — Railway Volume ───────────────────────────────────────
+// Railway volumes mount at /data. If the directory doesn't exist the server
+// refuses to start — never silently fall back to ephemeral local storage.
+const DB_PATH = (() => {
+  const vol = '/data';
+  if (!fs.existsSync(vol)) {
+    console.error('[DB] FATAL: Railway Volume not mounted at /data.');
+    console.error('[DB] Create a Volume in Railway dashboard and mount it at /data.');
+    process.exit(1);
+  }
+  return path.join(vol, 'reports.db');
+})();
+
+let Database;
+try {
+  Database = require('better-sqlite3');
+} catch (e) {
+  console.error('[DB] FATAL: better-sqlite3 not found. Run: npm install better-sqlite3');
+  process.exit(1);
+}
+
+const db = new Database(DB_PATH);
+db.pragma('journal_mode = WAL');   // safe concurrent reads while writing
+db.pragma('foreign_keys = ON');
+
+// Schema — idempotent, safe to run on every start
+db.exec(`
+  CREATE TABLE IF NOT EXISTS reports (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    folio       TEXT    NOT NULL,
+    timestamp   TEXT    NOT NULL,
+    airport     TEXT,
+    sector      TEXT,
+    title       TEXT,
+    description TEXT    NOT NULL,
+    risk        TEXT,
+    severity    TEXT,
+    probability TEXT,
+    category    TEXT,
+    status      TEXT    DEFAULT 'Reportada',
+    source      TEXT    DEFAULT 'mobile',
+    raw_json    TEXT    NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_reports_timestamp ON reports(timestamp);
+  CREATE INDEX IF NOT EXISTS idx_reports_folio     ON reports(folio);
+  CREATE INDEX IF NOT EXISTS idx_reports_category  ON reports(category);
+`);
+
+console.log('[DB] SQLite ready at ' + DB_PATH);
+
+// Prepared statements — compiled once, reused on every call
+const stmtInsert = db.prepare(`
+  INSERT INTO reports
+    (folio, timestamp, airport, sector, title, description,
+     risk, severity, probability, category, status, source, raw_json)
+  VALUES
+    (@folio, @timestamp, @airport, @sector, @title, @description,
+     @risk, @severity, @probability, @category, @status, @source, @raw_json)
+`);
+
+const stmtSelectPage = db.prepare(`
+  SELECT id, folio, timestamp, airport, sector, title, description,
+         risk, severity, probability, category, status, source
+  FROM   reports
+  WHERE  (@since IS NULL OR timestamp >= @since)
+  ORDER  BY timestamp DESC
+  LIMIT  @limit
+`);
+
+const stmtPurge = db.prepare(
+  `DELETE FROM reports WHERE timestamp < datetime('now', '-7 days')`
+);
+
+/** Persist one report. Accepts the _occ object already built in handlePostReport. */
+function dbSaveReport(occ) {
+  try {
+    stmtInsert.run({
+      folio:       occ.folio       || '',
+      timestamp:   occ.fecha       ? occ.fecha + 'T00:00:00Z' : new Date().toISOString(),
+      airport:     occ.aeropuerto  || null,
+      sector:      occ.sector      || null,
+      title:       occ.titulo      || null,
+      description: occ.texto       || '',
+      risk:        occ.nivel_riesgo || null,
+      severity:    occ.severidad   || null,
+      probability: occ.probabilidad || null,
+      category:    occ.categoria   || null,
+      status:      occ.estado      || 'Reportada',
+      source:      occ._fromMobile ? 'mobile' : 'web',
+      raw_json:    JSON.stringify(occ),
+    });
+    console.log('[DB] Saved report folio=' + occ.folio);
+  } catch (err) {
+    console.error('[DB] Insert error:', err.message);
+  }
+}
+
+// ── API Key middleware ────────────────────────────────────────────────────────
+// Checks Authorization: Bearer <key>  OR  x-api-key: <key>
+// Key is read from API_SECRET_KEY env var; defaults to pilot value.
+const API_SECRET_KEY = process.env.API_SECRET_KEY || 'safetyops-pilot-2026';
+
+function requireApiKey(req, res, origin) {
+  const auth = req.headers['authorization'] || '';
+  const xkey = req.headers['x-api-key']     || '';
+  const provided = auth.startsWith('Bearer ')
+    ? auth.slice(7).trim()
+    : xkey.trim();
+  if (provided === API_SECRET_KEY) return true;
+  sendJSON(res, 401, { error: 'unauthorized', message: 'API key requerida.' }, origin);
+  return false;
+}
+
+// ── 7-day purge — runs every 24 h ────────────────────────────────────────────
+setInterval(() => {
+  try {
+    const info = stmtPurge.run();
+    console.log('[DB] Purge: ' + info.changes + ' reportes eliminados (>7 días)');
+  } catch (err) {
+    console.error('[DB] Purge error:', err.message);
+  }
+}, 24 * 60 * 60 * 1000);
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -220,6 +345,19 @@ function handleHealth(res, origin) {
   }, origin);
 }
 
+function handleGetReports(req, res, origin) {
+  const urlObj  = new URL(req.url, 'http://localhost');
+  const limit   = Math.min(parseInt(urlObj.searchParams.get('limit') || '100', 10), 500);
+  const since   = urlObj.searchParams.get('since') || null; // ISO date e.g. 2026-08-01
+  try {
+    const rows = stmtSelectPage.all({ limit, since });
+    sendJSON(res, 200, { ok: true, count: rows.length, reports: rows }, origin);
+  } catch (err) {
+    console.error('[DB] GET /api/v1/reports error:', err.message);
+    sendJSON(res, 500, { error: 'db_error', message: err.message }, origin);
+  }
+}
+
 function handleConfig(res, origin) {
   sendJSON(res, 200, {
     version:          API_VERSION,
@@ -319,6 +457,8 @@ async function handlePostReport(req, res, origin) {
       // Persist in memory (cap at max)
       _storedReports.unshift(_occ);
       if (_storedReports.length > _STORED_REPORTS_MAX) _storedReports.length = _STORED_REPORTS_MAX;
+      // Persist to SQLite (Railway Volume)
+      dbSaveReport(_occ);
       // Real-time push to SafetyOps_v2 if it is connected
       if (isEngineConnected()) {
         try {
@@ -454,7 +594,14 @@ const server = http.createServer(async (req, res) => {
 
   if (method === 'GET'  && url === '/api/v1/health')  return handleHealth(res, origin);
   if (method === 'GET'  && url === '/api/v1/config')  return handleConfig(res, origin);
-  if (method === 'POST' && url === '/api/v1/reports') return handlePostReport(req, res, origin);
+  if (method === 'POST' && url === '/api/v1/reports') {
+    if (!requireApiKey(req, res, origin)) return;
+    return handlePostReport(req, res, origin);
+  }
+  if (method === 'GET'  && url.startsWith('/api/v1/reports')) {
+    if (!requireApiKey(req, res, origin)) return;
+    return handleGetReports(req, res, origin);
+  }
 
   sendJSON(res, 404, { error: 'not_found', message: `No route: ${method} ${url}` }, origin);
 });
