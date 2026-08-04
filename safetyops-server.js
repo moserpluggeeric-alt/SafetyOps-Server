@@ -176,6 +176,74 @@ try {
   console.warn('[engine] analysis-engine load failed:', err.message, '— WS-only mode');
 }
 
+// ── Groq LLM Integration ──────────────────────────────────────────────────────
+// Set GROQ_API_KEY env var to enable LLM-based classification.
+// Falls back to local Naive Bayes engine when not set.
+const GROQ_API_KEY   = process.env.GROQ_API_KEY || null;
+const GROQ_MODEL     = process.env.GROQ_MODEL   || 'llama-3.1-8b-instant';
+const GROQ_API_URL   = 'https://api.groq.com/openai/v1/chat/completions';
+
+const GROQ_CATEGORIES = ['Factor Humano','Técnico','Meteorología','Seguridad Aeroportuaria','ATC / Espacio Aéreo','Otro'];
+
+async function groqClassify(texto, area) {
+  if (!GROQ_API_KEY) return null;
+  const prompt = `Eres un experto en Gestión de Seguridad Operacional (SMS) aeronáutico.
+Analizá el siguiente reporte de seguridad y respondé SOLO con un objeto JSON válido con estos campos:
+- categoria: una de [${GROQ_CATEGORIES.map(c=>'"'+c+'"').join(', ')}]
+- severidad: "Catastrófico" | "Crítico" | "Marginal" | "Insignificante"
+- probabilidad: "Frecuente" | "Probable" | "Remoto" | "Improbable" | "Extremadamente Improbable"
+- nivel_riesgo: "Crítico" | "Alto" | "Medio" | "Bajo"
+- resumen: una oración breve en español explicando la clasificación
+
+Reporte (área: ${area || 'Operaciones'}):
+"${texto}"
+
+Respondé SOLO con el JSON, sin texto adicional.`;
+
+  try {
+    const https = require('https');
+    const body  = JSON.stringify({
+      model:      GROQ_MODEL,
+      messages:   [{ role: 'user', content: prompt }],
+      max_tokens: 300,
+      temperature: 0.1,
+    });
+    const result = await new Promise((resolve, reject) => {
+      const url = new URL(GROQ_API_URL);
+      const req = https.request({
+        hostname: url.hostname,
+        path:     url.pathname,
+        method:   'POST',
+        headers: {
+          'Authorization': 'Bearer ' + GROQ_API_KEY,
+          'Content-Type':  'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try { resolve(JSON.parse(data)); }
+          catch (e) { reject(new Error('Groq parse error: ' + data.slice(0, 200))); }
+        });
+      });
+      req.on('error', reject);
+      req.setTimeout(15000, () => { req.destroy(); reject(new Error('Groq timeout')); });
+      req.write(body);
+      req.end();
+    });
+    const content = result?.choices?.[0]?.message?.content || '';
+    const match   = content.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('No JSON in Groq response: ' + content.slice(0, 100));
+    const parsed  = JSON.parse(match[0]);
+    console.log('[groq] Classified — categoria=' + parsed.categoria + ' nivel=' + parsed.nivel_riesgo);
+    return parsed;
+  } catch (err) {
+    console.warn('[groq] Error — falling back to local engine:', err.message);
+    return null;
+  }
+}
+
 // ── Diagnostic Mode ───────────────────────────────────────────────────────────
 // Unified trace logger — add observability without touching any logic.
 // All TRACE calls are pure console output; no side effects on control flow.
@@ -325,6 +393,66 @@ function handleHealth(res, origin) {
     uptime:    uptime(),
     timestamp: new Date().toISOString(),
   }, origin);
+}
+
+/**
+ * POST /api/v1/sync
+ * Accepts an already-analyzed occ object from SafetyOps_v2 mobile flow.
+ * Saves to SQLite + pushes to connected desktop clients via WS.
+ * No engine required — classification already done by the browser.
+ */
+async function handleSyncReport(req, res, origin) {
+  let raw;
+  try { raw = await readBody(req); }
+  catch (err) { return sendJSON(res, 400, { error: 'read_error', message: 'Could not read body.' }, origin); }
+
+  let occ;
+  try { occ = JSON.parse(raw); }
+  catch (err) { return sendJSON(res, 400, { error: 'invalid_json', message: 'Body must be valid JSON.' }, origin); }
+
+  if (!occ || !occ.texto) {
+    return sendJSON(res, 400, { error: 'validation_error', message: 'Field "texto" is required.' }, origin);
+  }
+
+  // Ensure folio and timestamp
+  if (!occ.folio)  occ.folio     = 'OCC-' + Date.now();
+  if (!occ.fecha)  occ.fecha     = new Date().toISOString().slice(0, 10);
+  occ._fromMobile  = true;
+  occ._syncedAt    = new Date().toISOString();
+
+  // ── Optional Groq re-classification ────────────────────────────────────────
+  // If GROQ_API_KEY is set, upgrade the classification with the LLM result.
+  if (GROQ_API_KEY) {
+    const groqResult = await groqClassify(occ.texto, occ.area);
+    if (groqResult) {
+      occ.categoria    = groqResult.categoria    || occ.categoria;
+      occ.severidad    = groqResult.severidad    || occ.severidad;
+      occ.probabilidad = groqResult.probabilidad || occ.probabilidad;
+      occ.nivel_riesgo = groqResult.nivel_riesgo || occ.nivel_riesgo;
+      occ._groq_resumen = groqResult.resumen     || undefined;
+      occ._clasificado_por = 'groq:' + GROQ_MODEL;
+    }
+  }
+
+  // Persist in memory
+  _storedReports.unshift(occ);
+  if (_storedReports.length > _STORED_REPORTS_MAX) _storedReports.length = _STORED_REPORTS_MAX;
+
+  // Persist to SQLite
+  dbSaveReport(occ);
+
+  // Push to connected desktop (SafetyOps_v2)
+  if (isEngineConnected()) {
+    try {
+      engineSocket.send(JSON.stringify({ type: 'new_report', data: occ }));
+      console.log('[sync] new_report pushed to desktop — folio=' + occ.folio);
+    } catch (e) {
+      console.warn('[sync] WS push failed:', e.message);
+    }
+  }
+
+  console.log('[sync] Report synced — folio=' + occ.folio + ' categoria=' + occ.categoria);
+  return sendJSON(res, 200, { ok: true, folio: occ.folio, categoria: occ.categoria, nivel_riesgo: occ.nivel_riesgo }, origin);
 }
 
 function handleGetReports(req, res, origin) {
@@ -591,6 +719,10 @@ const server = http.createServer(async (req, res) => {
   if (method === 'GET'  && url.startsWith('/api/v1/reports')) {
     if (!requireApiKey(req, res, origin)) return;
     return handleGetReports(req, res, origin);
+  }
+  if (method === 'POST' && url === '/api/v1/sync') {
+    if (!requireApiKey(req, res, origin)) return;
+    return handleSyncReport(req, res, origin);
   }
 
   sendJSON(res, 404, { error: 'not_found', message: `No route: ${method} ${url}` }, origin);
