@@ -168,6 +168,9 @@ const PONG_TIMEOUT  = 90_000;  // 90s without any pong → stale, close
 const USE_LOCAL_ENGINE = process.env.USE_LOCAL_ENGINE !== 'false'; // default: true (PRODUCCIÓN)
 const COMPARE_MODE     = process.env.COMPARE_MODE     === 'true';  // default: false (PRODUCCIÓN)
 
+// ── Airport Database ──────────────────────────────────────────────────────────
+const { searchAirports, getAirport } = require('./airports-data');
+
 let _engine = null;
 try {
   _engine = require('./analysis-engine');
@@ -187,18 +190,37 @@ const GROQ_CATEGORIES = ['Factor Humano','Técnico','Meteorología','Seguridad A
 
 async function groqClassify(texto, area) {
   if (!GROQ_API_KEY) return null;
-  const prompt = `Eres un experto en Gestión de Seguridad Operacional (SMS) aeronáutico.
-Analizá el siguiente reporte de seguridad y respondé SOLO con un objeto JSON válido con estos campos:
-- categoria: una de [${GROQ_CATEGORIES.map(c=>'"'+c+'"').join(', ')}]
+  const prompt = `Sos un experto en Gestión de Seguridad Operacional (SMS) aeronáutico, entrenado en las normas ICAO Anexo 19, EVAIR (EUROCONTROL Voluntary ATM Incident Reporting) y la taxonomía de ocurrencias de la ANAC Argentina.
+
+Tu tarea es clasificar el siguiente reporte de seguridad operacional según estas categorías SMS:
+
+CATEGORÍAS (elegí EXACTAMENTE una):
+- "Factor Humano": errores de tripulación, fatiga, comunicación, procedimientos no seguidos, CRM deficiente
+- "Técnico": fallas de aeronave, sistemas, motores, aviónica, estructura, equipamiento de rampa
+- "Meteorología": condiciones meteorológicas adversas, windshear, turbulencia, hielo, visibilidad reducida
+- "Seguridad Aeroportuaria": incursiones en pista, FOD, accesos no autorizados, incidentes en rampa/plataforma
+- "ATC / Espacio Aéreo": separación reducida, instrucciones de ATC, gestión del espacio aéreo, conflictos de tráfico
+- "Otro": no encaja en ninguna categoría anterior
+
+GUÍA DE CLASIFICACIÓN (basada en EVAIR):
+- Incendio a bordo → "Técnico" (salvo que sea por error de tripulación → "Factor Humano")
+- Incursión en pista → "Seguridad Aeroportuaria"
+- TCAS RA → "ATC / Espacio Aéreo"
+- Bird strike → "Técnico"
+- Aproximación inestable continuada → "Factor Humano"
+- Mal tiempo que afecta operación → "Meteorología"
+- Falla hidráulica / eléctrica → "Técnico"
+
+ESCALAS DE RIESGO (ICAO/ANAC):
 - severidad: "Catastrófico" | "Crítico" | "Marginal" | "Insignificante"
 - probabilidad: "Frecuente" | "Probable" | "Remoto" | "Improbable" | "Extremadamente Improbable"
 - nivel_riesgo: "Crítico" | "Alto" | "Medio" | "Bajo"
-- resumen: una oración breve en español explicando la clasificación
 
-Reporte (área: ${area || 'Operaciones'}):
+Reporte recibido (área operacional: ${area || 'Operaciones de Vuelo'}):
 "${texto}"
 
-Respondé SOLO con el JSON, sin texto adicional.`;
+Respondé ÚNICAMENTE con un objeto JSON válido con estos campos: categoria, severidad, probabilidad, nivel_riesgo, resumen (una oración en español explicando la clasificación).
+Sin texto adicional, sin markdown, solo el JSON.`;
 
   try {
     const https = require('https');
@@ -453,6 +475,78 @@ async function handleSyncReport(req, res, origin) {
 
   console.log('[sync] Report synced — folio=' + occ.folio + ' categoria=' + occ.categoria);
   return sendJSON(res, 200, { ok: true, folio: occ.folio, categoria: occ.categoria, nivel_riesgo: occ.nivel_riesgo }, origin);
+}
+
+/**
+ * GET /api/v1/airports?q=EZE        → busca por ICAO, IATA, nombre o ciudad
+ * GET /api/v1/airports?code=SAEZ    → aeropuerto exacto + sectores
+ * No requiere API key — es información pública.
+ */
+function handleAirports(req, res, origin) {
+  const urlObj = new URL(req.url, 'http://localhost');
+  const code   = urlObj.searchParams.get('code') || '';
+  const q      = urlObj.searchParams.get('q')    || '';
+
+  if (code) {
+    const airport = getAirport(code);
+    if (!airport) return sendJSON(res, 404, { error: 'not_found', message: 'Aeropuerto no encontrado: ' + code }, origin);
+    return sendJSON(res, 200, { ok: true, airport }, origin);
+  }
+
+  if (q.trim().length < 2) {
+    return sendJSON(res, 400, { error: 'query_too_short', message: 'El parámetro q debe tener al menos 2 caracteres.' }, origin);
+  }
+
+  const results = searchAirports(q, 10);
+  return sendJSON(res, 200, { ok: true, count: results.length, airports: results }, origin);
+}
+
+/**
+ * GET /api/v1/stats — métricas del sistema para observabilidad.
+ * Requiere API key.
+ */
+function handleStats(req, res, origin) {
+  db.get(`SELECT COUNT(*) as total,
+    SUM(CASE WHEN date(timestamp) = date('now') THEN 1 ELSE 0 END) as hoy,
+    SUM(CASE WHEN date(timestamp) >= date('now','-7 days') THEN 1 ELSE 0 END) as ultimos_7_dias,
+    SUM(CASE WHEN source = 'mobile' THEN 1 ELSE 0 END) as desde_movil,
+    SUM(CASE WHEN category = 'Factor Humano' THEN 1 ELSE 0 END) as factor_humano,
+    SUM(CASE WHEN category = 'Técnico' THEN 1 ELSE 0 END) as tecnico,
+    SUM(CASE WHEN category = 'Meteorología' THEN 1 ELSE 0 END) as meteorologia,
+    SUM(CASE WHEN category = 'Seguridad Aeroportuaria' THEN 1 ELSE 0 END) as seguridad_aeroportuaria,
+    SUM(CASE WHEN category = 'ATC / Espacio Aéreo' THEN 1 ELSE 0 END) as atc,
+    SUM(CASE WHEN category = 'Otro' THEN 1 ELSE 0 END) as otro,
+    SUM(CASE WHEN risk = 'Crítico' THEN 1 ELSE 0 END) as riesgo_critico,
+    SUM(CASE WHEN risk = 'Alto' THEN 1 ELSE 0 END) as riesgo_alto
+  FROM reports`, (err, row) => {
+    if (err) return sendJSON(res, 500, { error: 'db_error', message: err.message }, origin);
+    sendJSON(res, 200, {
+      ok:          true,
+      timestamp:   new Date().toISOString(),
+      uptime_secs: Math.floor((Date.now() - SERVER_START) / 1000),
+      groq_active: !!GROQ_API_KEY,
+      groq_model:  GROQ_API_KEY ? GROQ_MODEL : null,
+      engine_connected: isEngineConnected(),
+      reportes: {
+        total:              row.total             || 0,
+        hoy:                row.hoy               || 0,
+        ultimos_7_dias:     row.ultimos_7_dias    || 0,
+        desde_movil:        row.desde_movil       || 0,
+        por_categoria: {
+          factor_humano:          row.factor_humano          || 0,
+          tecnico:                row.tecnico                || 0,
+          meteorologia:           row.meteorologia           || 0,
+          seguridad_aeroportuaria:row.seguridad_aeroportuaria|| 0,
+          atc:                    row.atc                    || 0,
+          otro:                   row.otro                   || 0,
+        },
+        por_riesgo: {
+          critico: row.riesgo_critico || 0,
+          alto:    row.riesgo_alto    || 0,
+        },
+      },
+    }, origin);
+  });
 }
 
 function handleGetReports(req, res, origin) {
@@ -723,6 +817,13 @@ const server = http.createServer(async (req, res) => {
   if (method === 'POST' && url === '/api/v1/sync') {
     if (!requireApiKey(req, res, origin)) return;
     return handleSyncReport(req, res, origin);
+  }
+  if (method === 'GET' && url.startsWith('/api/v1/airports')) {
+    return handleAirports(req, res, origin);
+  }
+  if (method === 'GET' && url === '/api/v1/stats') {
+    if (!requireApiKey(req, res, origin)) return;
+    return handleStats(req, res, origin);
   }
 
   sendJSON(res, 404, { error: 'not_found', message: `No route: ${method} ${url}` }, origin);
