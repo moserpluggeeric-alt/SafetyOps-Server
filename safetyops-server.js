@@ -454,9 +454,76 @@ function handleHealth(res, origin) {
     version:   API_VERSION,
     engine:    isEngineConnected() ? 'connected' : 'disconnected',
     guidance:  findGuidance ? 'loaded' : ('error: ' + _guidanceLoadError),
+    groq:      GROQ_API_KEY ? 'active' : 'not_configured',
     uptime:    uptime(),
     timestamp: new Date().toISOString(),
   }, origin);
+}
+
+// ── Sprint A: POST /api/v1/classify ──────────────────────────────────────────
+// Classifies a text using Groq (server-side API key).
+// No auth required — public endpoint for any SafetyOps client.
+// No side effects: no DB writes, no WS events, no report creation.
+async function handleClassify(req, res, origin) {
+  let raw;
+  try { raw = await readBody(req); }
+  catch (err) { return sendJSON(res, 400, { success: false, error: 'read_error' }, origin); }
+
+  let body;
+  try { body = JSON.parse(raw); }
+  catch (err) { return sendJSON(res, 400, { success: false, error: 'invalid_json' }, origin); }
+
+  const text = (body.text || '').trim();
+  const lang = body.lang || 'es';
+
+  if (!text) {
+    return sendJSON(res, 400, { success: false, error: 'text_required' }, origin);
+  }
+
+  if (!GROQ_API_KEY) {
+    return sendJSON(res, 503, { success: false, error: 'engine_unavailable', detail: 'GROQ_API_KEY not configured' }, origin);
+  }
+
+  try {
+    const t0 = Date.now();
+    const groqResult = await groqClassify(text, null);
+    const ms = Date.now() - t0;
+
+    if (!groqResult) {
+      return sendJSON(res, 503, { success: false, error: 'engine_unavailable' }, origin);
+    }
+
+    // Map Groq categories → full ICAO/SMS taxonomy names
+    const CAT_MAP = {
+      'Factor Humano':          'Factores Humanos',
+      'Técnico':                'Falla Técnica',
+      'Meteorología':           'Meteorología Adversa',
+      'Seguridad Aeroportuaria':'Seguridad Aeroportuaria',
+      'ATC / Espacio Aéreo':    'Incidencia ATC',
+      'Otro':                   'Otro',
+    };
+    const category = CAT_MAP[groqResult.categoria] || groqResult.categoria;
+
+    sendJSON(res, 200, {
+      success: true,
+      classification: {
+        category,
+        risk:       groqResult.nivel_riesgo || null,
+        confidence: groqResult.confianza    || null,
+      },
+      engine: {
+        provider: 'Groq',
+        model:    GROQ_MODEL,
+        ms,
+      },
+      version: '1.0',
+    }, origin);
+
+    console.log(`[classify] "${text.slice(0, 60)}" → ${category} (${ms}ms)`);
+  } catch (err) {
+    console.error('[classify] Groq error:', err.message);
+    sendJSON(res, 503, { success: false, error: 'engine_unavailable' }, origin);
+  }
 }
 
 /**
@@ -898,6 +965,9 @@ const server = http.createServer(async (req, res) => {
   }
   if (method === 'POST' && url === '/api/v1/guidance') {
     return handleGuidance(req, res, origin);
+  }
+  if (method === 'POST' && url === '/api/v1/classify') {
+    return handleClassify(req, res, origin);
   }
 
   // ── TODO Sprint 3: /api/v1/login ─────────────────────────────────────────
