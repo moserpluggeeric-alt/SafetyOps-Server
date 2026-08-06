@@ -201,7 +201,16 @@ const COMPARE_MODE     = process.env.COMPARE_MODE     === 'true';  // default: f
 const { searchAirports, getAirport } = require('./airports-data');
 
 // ── Emergency Guidance Engine ─────────────────────────────────────────────────
-const { findGuidance } = require('./guidance-engine');
+let findGuidance = null;
+let _guidanceLoadError = null;
+try {
+  const ge = require('./guidance-engine');
+  findGuidance = ge.findGuidance;
+  console.log('[guidance] guidance-engine loaded OK — ' + (ge.listProcedures ? ge.listProcedures().length : '?') + ' procedimientos');
+} catch (err) {
+  _guidanceLoadError = err.message;
+  console.error('[guidance] guidance-engine load FAILED:', err.message);
+}
 
 let _engine = null;
 try {
@@ -444,6 +453,7 @@ function handleHealth(res, origin) {
     status:    'ok',
     version:   API_VERSION,
     engine:    isEngineConnected() ? 'connected' : 'disconnected',
+    guidance:  findGuidance ? 'loaded' : ('error: ' + _guidanceLoadError),
     uptime:    uptime(),
     timestamp: new Date().toISOString(),
   }, origin);
@@ -588,6 +598,9 @@ function handleStats(req, res, origin) {
  * Rate limit implícito: si el origen no tiene CORS permitido, el browser lo bloquea igual.
  */
 function handleGuidance(req, res, origin) {
+  if (!findGuidance) {
+    return sendJSON(res, 503, { error: 'guidance_unavailable', message: _guidanceLoadError }, origin);
+  }
   let body = '';
   req.on('data', chunk => { body += chunk; });
   req.on('end', () => {
