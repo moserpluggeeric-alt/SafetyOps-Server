@@ -1,0 +1,124 @@
+[
+  {
+    "id": "smoke-cabin-001",
+    "trigger_keywords": ["humo", "smoke", "fuego", "llama", "quemado", "olor", "incendio", "humareda"],
+    "sector_tags": ["cabina", "galley", "pasajeros", "cockpit"],
+    "aircraft_tags": ["B738", "A320", "general"],
+    "fuente": "QRH Operacional / OACI Anexo 6 §3.4",
+    "steps": [
+      "1. Notificar al Comandante (PIC) de inmediato.",
+      "2. Identificar la fuente u origen del humo.",
+      "3. Si el humo es eléctrico: desconectar equipos no esenciales.",
+      "4. Si hay llama visible: utilizar el extintor adecuado según el tipo de fuego.",
+      "5. Activar protocolo de evacuación si el humo es denso o persistente."
+    ],
+    "alerta": "⚠️ NO usar agua si hay sospecha de fuego eléctrico. Use CO₂ o polvo químico."
+  },
+  {
+    "id": "medical-unconscious-002",
+    "trigger_keywords": ["desmayado", "inconsciente", "colapso", "no responde", "desvanecido", "sin conocimiento", "caído", "médico", "emergencia médica", "convulsión"],
+    "sector_tags": ["cabina", "plataforma", "oficinas", "terminal", "rampa", "general"],
+    "aircraft_tags": ["general"],
+    "fuente": "Protocolo Primeros Auxilios OACI / Manual de Emergencias Médicas",
+    "steps": [
+      "1. Verificar estado de consciencia: hablarle firmemente y estimular con cuidado.",
+      "2. Pedir asistencia médica o activar emergencias (106 en AR) de inmediato.",
+      "3. Comprobar respiración y pulso carotídeo por 10 segundos.",
+      "4. Si no respira y estás capacitado: iniciar RCP (30 compresiones / 2 respiraciones).",
+      "5. Solicitar DEA (Desfibrilador) de forma urgente al personal del aeropuerto."
+    ],
+    "alerta": "⚠️ No mover a la persona a menos que esté en peligro inminente."
+  },
+  {
+    "id": "runway-incursion-003",
+    "trigger_keywords": ["incursión", "pista", "aeronave en pista", "cruce no autorizado", "runway", "vehículo en pista", "acceso no autorizado", "invadió"],
+    "sector_tags": ["pista", "plataforma", "torre de control", "acceso vehicular"],
+    "aircraft_tags": ["general"],
+    "fuente": "OACI Doc 9870 / Manual de Prevención de Incursiones en Pista",
+    "steps": [
+      "1. Comunicar inmediatamente a la Torre de Control (ATC) la posición y naturaleza de la incursión.",
+      "2. Detener toda operación en la pista afectada hasta autorización ATC.",
+      "3. Si hay aeronave en rodaje: detener engines y esperar instrucciones.",
+      "4. Registrar posición, matrícula/identificación del intruso si es posible.",
+      "5. No abandonar el lugar hasta que ATC dé la autorización expresa."
+    ],
+    "alerta": "⚠️ No retomar operaciones en pista sin clearance explícito de ATC."
+  },
+  {
+    "id": "tcas-ra-004",
+    "trigger_keywords": ["tcas", "RA", "resolución advisory", "tráfico", "colisión aérea", "conflicto de tráfico", "alerta de tráfico", "CLIMB", "DESCEND"],
+    "sector_tags": ["cockpit", "cabina", "torre de control"],
+    "aircraft_tags": ["B738", "A320", "general"],
+    "fuente": "OACI Anexo 2 / Manual TCAS II v7.1",
+    "steps": [
+      "1. Seguir la indicación del TCAS RA de inmediato (CLIMB / DESCEND / MAINTAIN).",
+      "2. Informar a ATC: 'TCAS RA, [maniobra]'.",
+      "3. NO obedecer instrucciones ATC contrarias al RA hasta que el TCAS indique 'CLEAR OF CONFLICT'.",
+      "4. Al resolver el conflicto, informar a ATC y solicitar reanudación de la clearance original.",
+      "5. Documentar el evento para el reporte de ocurrencia obligatorio."
+    ],
+    "alerta": "⚠️ El RA tiene prioridad absoluta sobre las instrucciones de ATC durante el conflicto."
+  },
+  {
+    "id": "fuel-emergency-005",
+    "trigger_keywords": ["combustible", "fuel", "maydayfuel", "reserva mínima", "sin combustible", "bajo combustible", "low fuel", "emergencia combustible", "tanks"],
+    "sector_tags": ["cockpit", "plataforma", "combustible", "torre de control"],
+    "aircraft_tags": ["general"],
+    "fuente": "OACI Anexo 6 / Regulaciones ANAC RA 91",
+    "steps": [
+      "1. Declarar MAYDAY FUEL si la reserva es menor a la final (45 min en vuelo IFR).",
+      "2. Informar a ATC: 'MAYDAY MAYDAY MAYDAY, [indicativo], combustible mínimo'.",
+      "3. Solicitar prioridad de aterrizaje y vectores directos al aeropuerto más cercano.",
+      "4. Activar checklist de emergencia de combustible según tipo de aeronave.",
+      "5. Notificar a cabina y preparar pasajeros si la situación lo requiere."
+    ],
+    "alerta": "⚠️ MAYDAY FUEL se declara antes de alcanzar el mínimo, no después."
+  },
+  {
+    "id": "depressurization-006",
+    "trigger_keywords": ["descompresión", "despresurización", "presión de cabina", "máscara de oxígeno", "cabin altitude", "presurización", "pérdida de presión"],
+    "sector_tags": ["cabina", "cockpit", "pasajeros"],
+    "aircraft_tags": ["B738", "A320", "general"],
+    "fuente": "QRH / Procedimientos de Emergencia Despresurización",
+    "steps": [
+      "1. Colocarse la máscara de oxígeno inmediatamente (tripulación primero).",
+      "2. Ejecutar descenso de emergencia a FL100 o MEA si corresponde.",
+      "3. Declarar MAYDAY a ATC informando la emergencia y el nivel de descenso.",
+      "4. Verificar que las máscaras de pasajeros se hayan desplegado.",
+      "5. Aterrizar en el aeropuerto más cercano operativamente disponible."
+    ],
+    "alerta": "⚠️ A FL250 tenés aproximadamente 3 minutos de tiempo útil de consciencia sin oxígeno."
+  },
+  {
+    "id": "birdstrike-008",
+    "trigger_keywords": ["birdstrike", "pájaro", "ave", "impacto de ave", "colisión con ave", "bird hit", "fauna", "impacto aviario"],
+    "sector_tags": ["pista", "plataforma", "perimetral", "torre de control"],
+    "aircraft_tags": ["general"],
+    "fuente": "OACI Doc 9137 / Manual de Control de Fauna Aeroportuaria",
+    "steps": [
+      "1. Informar a ATC la posición y naturaleza del impacto de inmediato.",
+      "2. Evaluar estado de motores y sistemas afectados.",
+      "3. Activar checklist de daño en motor si corresponde.",
+      "4. Solicitar inspección de pista a ATC antes de reanudación de operaciones.",
+      "5. Recolectar restos de aves para identificación de especie (si es seguro hacerlo).",
+      "6. Completar formulario de reporte de fauna ANAC post-incidente."
+    ],
+    "alerta": "⚠️ No asumir ausencia de daño. El motor puede fallar segundos después del impacto."
+  },
+  {
+    "id": "spill-hazmat-009",
+    "trigger_keywords": ["derrame", "sustancia peligrosa", "hazmat", "químico", "combustible derramado", "kerosene", "jet fuel", "ácido", "corrosivo", "tóxico"],
+    "sector_tags": ["plataforma", "área de carga", "combustible", "hangares", "rampa"],
+    "aircraft_tags": ["general"],
+    "fuente": "OACI Doc 9284 / Instrucciones Técnicas Mercancías Peligrosas",
+    "steps": [
+      "1. Alejar al personal no autorizado del área afectada (radio mínimo 50 m).",
+      "2. Notificar al responsable de operaciones y servicio de bomberos aeroportuario.",
+      "3. No intentar limpiar el derrame sin EPP adecuado y entrenamiento específico.",
+      "4. Identificar la sustancia mediante la placa/etiqueta de peligrosidad si es posible.",
+      "5. Aislar el área hasta la llegada de los equipos de respuesta a emergencias.",
+      "6. Registrar hora, lugar y sustancia para el reporte de ocurrencia."
+    ],
+    "alerta": "⚠️ No encender motores ni operar equipos eléctricos cerca del derrame."
+  }
+]

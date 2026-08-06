@@ -1,0 +1,21 @@
+{
+  "id": "runway-incursion-003",
+  "title": "Incursión en pista",
+  "trigger_keywords": ["incursión", "pista", "aeronave en pista", "cruce no autorizado", "runway", "vehículo en pista", "acceso no autorizado", "invadió", "incursion de pista", "acceso pista"],
+  "sector_tags": ["pista", "plataforma", "torre de control", "acceso vehicular"],
+  "aircraft_tags": ["general"],
+  "severity": "ALTO",
+  "requiresEmergencyCall": false,
+  "fuente": "OACI Doc 9870 / Manual de Prevención de Incursiones en Pista",
+  "steps": [
+    "Comunicá inmediatamente a la Torre de Control (ATC) la posición y naturaleza de la incursión.",
+    "Detené toda operación en la pista afectada hasta autorización ATC.",
+    "Si hay aeronave en rodaje: detenela y esperá instrucciones.",
+    "Registrá posición, matrícula o identificación del intruso si es posible.",
+    "No abandonés el lugar hasta que ATC dé la autorización expresa."
+  ],
+  "warnings": [
+    "NO retomar operaciones en pista sin clearance explícito de ATC.",
+    "Alertá a todas las aeronaves en frecuencia sobre la pista bloqueada."
+  ]
+}

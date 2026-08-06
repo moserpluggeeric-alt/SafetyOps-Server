@@ -1,0 +1,21 @@
+{
+  "id": "smoke-cabin-001",
+  "title": "Humo / Incendio a bordo",
+  "trigger_keywords": ["humo", "smoke", "fuego", "llama", "quemado", "olor", "incendio", "humareda", "fuego a bordo", "fire"],
+  "sector_tags": ["cabina", "galley", "pasajeros", "cockpit"],
+  "aircraft_tags": ["B738", "A320", "general"],
+  "severity": "CRÍTICO",
+  "requiresEmergencyCall": true,
+  "fuente": "QRH Operacional / OACI Anexo 6 §3.4",
+  "steps": [
+    "Notificá al Comandante (PIC) de inmediato.",
+    "Identificá la fuente u origen del humo.",
+    "Si el humo es eléctrico: desconectá equipos no esenciales.",
+    "Si hay llama visible: usá el extintor adecuado según el tipo de fuego.",
+    "Activá protocolo de evacuación si el humo es denso o persistente."
+  ],
+  "warnings": [
+    "NO usar agua si hay sospecha de fuego eléctrico. Usá CO₂ o polvo químico.",
+    "El humo de baterías de litio es tóxico — protegé las vías respiratorias."
+  ]
+}

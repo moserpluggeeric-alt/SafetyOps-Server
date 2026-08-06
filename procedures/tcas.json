@@ -1,0 +1,21 @@
+{
+  "id": "tcas-ra-004",
+  "title": "TCAS Resolution Advisory (RA)",
+  "trigger_keywords": ["tcas", "RA", "resolución advisory", "tráfico", "colisión aérea", "conflicto de tráfico", "alerta de tráfico", "CLIMB", "DESCEND", "traffic alert"],
+  "sector_tags": ["cockpit", "cabina", "torre de control"],
+  "aircraft_tags": ["B738", "A320", "general"],
+  "severity": "CRÍTICO",
+  "requiresEmergencyCall": false,
+  "fuente": "OACI Anexo 2 / Manual TCAS II v7.1",
+  "steps": [
+    "Seguí la indicación del TCAS RA de inmediato (CLIMB / DESCEND / MAINTAIN).",
+    "Informá a ATC: 'TCAS RA, [maniobra]'.",
+    "NO obedezcas instrucciones ATC contrarias al RA hasta que el TCAS indique 'CLEAR OF CONFLICT'.",
+    "Al resolver el conflicto, informá a ATC y solicitá reanudación de la clearance original.",
+    "Documentá el evento para el reporte de ocurrencia obligatorio."
+  ],
+  "warnings": [
+    "El RA tiene prioridad ABSOLUTA sobre las instrucciones de ATC durante el conflicto.",
+    "Nunca ignores o demores la respuesta al RA — cada segundo cuenta."
+  ]
+}

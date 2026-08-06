@@ -1,0 +1,21 @@
+{
+  "id": "medical-unconscious-002",
+  "title": "Emergencia médica / Persona inconsciente",
+  "trigger_keywords": ["desmayado", "inconsciente", "colapso", "no responde", "desvanecido", "sin conocimiento", "caído", "médico", "emergencia médica", "convulsión", "desmayo", "accidente personal"],
+  "sector_tags": ["cabina", "plataforma", "oficinas", "terminal", "rampa", "general"],
+  "aircraft_tags": ["general"],
+  "severity": "CRÍTICO",
+  "requiresEmergencyCall": true,
+  "fuente": "Protocolo Primeros Auxilios OACI / Manual de Emergencias Médicas",
+  "steps": [
+    "Verificá estado de consciencia: hablale firmemente y estimulá con cuidado.",
+    "Pedí asistencia médica o activá emergencias (106 en AR) de inmediato.",
+    "Comprobá respiración y pulso carotídeo por 10 segundos.",
+    "Si no respira y estás capacitado: iniciá RCP (30 compresiones / 2 respiraciones).",
+    "Solicitá DEA (Desfibrilador) de forma urgente al personal del aeropuerto."
+  ],
+  "warnings": [
+    "No mover a la persona a menos que esté en peligro inminente.",
+    "Si hay sospecha de lesión cervical, inmovilizá la cabeza."
+  ]
+}

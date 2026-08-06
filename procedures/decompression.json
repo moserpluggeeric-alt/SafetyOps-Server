@@ -1,0 +1,21 @@
+{
+  "id": "depressurization-006",
+  "title": "Despresurización de cabina",
+  "trigger_keywords": ["descompresión", "despresurización", "presión de cabina", "máscara de oxígeno", "cabin altitude", "presurización", "pérdida de presión", "masks dropped", "mascaras"],
+  "sector_tags": ["cabina", "cockpit", "pasajeros"],
+  "aircraft_tags": ["B738", "A320", "general"],
+  "severity": "CRÍTICO",
+  "requiresEmergencyCall": true,
+  "fuente": "QRH / Procedimientos de Emergencia Despresurización",
+  "steps": [
+    "Colocate la máscara de oxígeno de inmediato (tripulación primero).",
+    "Ejecutá descenso de emergencia a FL100 o MEA si corresponde.",
+    "Declarar MAYDAY a ATC informando la emergencia y el nivel de descenso.",
+    "Verificá que las máscaras de pasajeros se hayan desplegado.",
+    "Aterrizá en el aeropuerto más cercano operativamente disponible."
+  ],
+  "warnings": [
+    "A FL250 tenés aproximadamente 3 minutos de tiempo útil de consciencia sin oxígeno.",
+    "Prioridad absoluta: máscara primero, luego comunicar."
+  ]
+}

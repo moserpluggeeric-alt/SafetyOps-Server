@@ -1,0 +1,22 @@
+{
+  "id": "spill-hazmat-009",
+  "title": "Derrame de sustancia peligrosa (HAZMAT)",
+  "trigger_keywords": ["derrame", "sustancia peligrosa", "hazmat", "químico", "combustible derramado", "kerosene", "jet fuel", "ácido", "corrosivo", "tóxico", "derrame de fuel", "spill"],
+  "sector_tags": ["plataforma", "área de carga", "combustible", "hangares", "rampa"],
+  "aircraft_tags": ["general"],
+  "severity": "ALTO",
+  "requiresEmergencyCall": false,
+  "fuente": "OACI Doc 9284 / Instrucciones Técnicas Mercancías Peligrosas",
+  "steps": [
+    "Alejá al personal no autorizado del área afectada (radio mínimo 50 m).",
+    "Notificá al responsable de operaciones y servicio de bomberos aeroportuario.",
+    "No intentés limpiar el derrame sin EPP adecuado y entrenamiento específico.",
+    "Identificá la sustancia mediante la placa o etiqueta de peligrosidad si es posible.",
+    "Aislar el área hasta la llegada de los equipos de respuesta a emergencias.",
+    "Registrá hora, lugar y sustancia para el reporte de ocurrencia."
+  ],
+  "warnings": [
+    "NO encender motores ni operar equipos eléctricos cerca del derrame.",
+    "Evitá el contacto directo con la sustancia hasta conocer su tipo exacto."
+  ]
+}

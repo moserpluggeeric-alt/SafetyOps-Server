@@ -1,0 +1,22 @@
+{
+  "id": "birdstrike-008",
+  "title": "Impacto de fauna / Birdstrike",
+  "trigger_keywords": ["birdstrike", "pájaro", "ave", "impacto de ave", "colisión con ave", "bird hit", "fauna", "impacto aviario", "bird strike", "ave en motor", "aves en pista"],
+  "sector_tags": ["pista", "plataforma", "perimetral", "torre de control"],
+  "aircraft_tags": ["general"],
+  "severity": "ALTO",
+  "requiresEmergencyCall": false,
+  "fuente": "OACI Doc 9137 / Manual de Control de Fauna Aeroportuaria",
+  "steps": [
+    "Informá a ATC la posición y naturaleza del impacto de inmediato.",
+    "Evaluá estado de motores y sistemas afectados.",
+    "Activá checklist de daño en motor si corresponde.",
+    "Solicitá inspección de pista a ATC antes de reanudación de operaciones.",
+    "Recolectá restos de aves para identificación de especie (si es seguro hacerlo).",
+    "Completá formulario de reporte de fauna ANAC post-incidente."
+  ],
+  "warnings": [
+    "No asumir ausencia de daño — el motor puede fallar segundos después del impacto.",
+    "Inspeccioná visualmente y verificá parámetros antes de descartar daño estructural."
+  ]
+}

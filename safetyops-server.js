@@ -51,6 +51,7 @@ const db = new sqlite3Mod.Database(DB_PATH, (err) => {
 db.serialize(() => {
   db.run('PRAGMA journal_mode = WAL');
   db.run('PRAGMA foreign_keys = ON');
+
   db.run(`CREATE TABLE IF NOT EXISTS reports (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     folio       TEXT    NOT NULL,
@@ -70,6 +71,34 @@ db.serialize(() => {
   db.run('CREATE INDEX IF NOT EXISTS idx_reports_timestamp ON reports(timestamp)');
   db.run('CREATE INDEX IF NOT EXISTS idx_reports_folio     ON reports(folio)');
   db.run('CREATE INDEX IF NOT EXISTS idx_reports_category  ON reports(category)');
+
+  // ── TODO Sprint 3: tabla users ──────────────────────────────────────────
+  // Esqueleto preparado. Descomentar cuando se active el sistema de auth.
+  // bcrypt debe instalarse: npm install bcryptjs
+  /*
+  db.run(`CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id    INTEGER NOT NULL DEFAULT 1,
+    username      TEXT    NOT NULL UNIQUE,
+    password_hash TEXT    NOT NULL,
+    role          TEXT    NOT NULL DEFAULT 'operador',
+    active        INTEGER NOT NULL DEFAULT 1,
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+    last_login    TEXT,
+    last_activity TEXT
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_users_username   ON users(username)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_users_company_id ON users(company_id)');
+
+  // Roles disponibles: 'admin' | 'supervisor' | 'operador' | 'observador'
+  // Seed: usuario admin inicial (cambiar contraseña antes de activar en prod)
+  // const bcrypt = require('bcryptjs');
+  // const adminHash = bcrypt.hashSync('SafetyOps2025!', 10);
+  // db.run(`INSERT OR IGNORE INTO users (username, password_hash, role)
+  //         VALUES ('admin', ?, 'admin')`, [adminHash]);
+  */
+  // ── Fin skeleton users ──────────────────────────────────────────────────
 });
 
 /** Persist one report — fire and forget, errors logged only. */
@@ -170,6 +199,9 @@ const COMPARE_MODE     = process.env.COMPARE_MODE     === 'true';  // default: f
 
 // ── Airport Database ──────────────────────────────────────────────────────────
 const { searchAirports, getAirport } = require('./airports-data');
+
+// ── Emergency Guidance Engine ─────────────────────────────────────────────────
+const { findGuidance } = require('./guidance-engine');
 
 let _engine = null;
 try {
@@ -549,6 +581,32 @@ function handleStats(req, res, origin) {
   });
 }
 
+/**
+ * POST /api/v1/guidance
+ * Body: { trigger: string, sector?: string, aircraft?: string }
+ * Sin API key — es información pública (procedimientos validados, no datos del usuario).
+ * Rate limit implícito: si el origen no tiene CORS permitido, el browser lo bloquea igual.
+ */
+function handleGuidance(req, res, origin) {
+  let body = '';
+  req.on('data', chunk => { body += chunk; });
+  req.on('end', () => {
+    let parsed;
+    try { parsed = JSON.parse(body); } catch (_) {
+      return sendJSON(res, 400, { error: 'invalid_json' }, origin);
+    }
+    const { trigger, sector, aircraft } = parsed;
+    if (!trigger || typeof trigger !== 'string' || trigger.trim().length < 3) {
+      return sendJSON(res, 400, { error: 'trigger_required', message: "El campo 'trigger' es obligatorio (mínimo 3 caracteres)." }, origin);
+    }
+    const result = findGuidance(trigger.trim(), sector, aircraft);
+    if (!result.found) {
+      return sendJSON(res, 200, { ok: false, steps: null, fallback: result.fallback }, origin);
+    }
+    return sendJSON(res, 200, { ok: true, ...result.data }, origin);
+  });
+}
+
 function handleGetReports(req, res, origin) {
   const urlObj = new URL(req.url, 'http://localhost');
   const limit  = Math.min(parseInt(urlObj.searchParams.get('limit') || '100', 10), 500);
@@ -825,6 +883,24 @@ const server = http.createServer(async (req, res) => {
     if (!requireApiKey(req, res, origin)) return;
     return handleStats(req, res, origin);
   }
+  if (method === 'POST' && url === '/api/v1/guidance') {
+    return handleGuidance(req, res, origin);
+  }
+
+  // ── TODO Sprint 3: /api/v1/login ─────────────────────────────────────────
+  // Endpoint de autenticación. Esqueleto preparado — NO activado.
+  // Para activar: descomentar el bloque, instalar bcryptjs, habilitar tabla users.
+  //
+  // if (method === 'POST' && url === '/api/v1/login') {
+  //   return handleLogin(req, res, origin);
+  // }
+  // if (method === 'POST' && url === '/api/v1/logout') {
+  //   return handleLogout(req, res, origin);
+  // }
+  // if (method === 'GET' && url === '/api/v1/me') {
+  //   return handleMe(req, res, origin);
+  // }
+  // ── Fin skeleton login ────────────────────────────────────────────────────
 
   sendJSON(res, 404, { error: 'not_found', message: `No route: ${method} ${url}` }, origin);
 });

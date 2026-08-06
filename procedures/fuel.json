@@ -1,0 +1,21 @@
+{
+  "id": "fuel-emergency-005",
+  "title": "Emergencia de combustible",
+  "trigger_keywords": ["combustible", "fuel", "maydayfuel", "reserva mínima", "sin combustible", "bajo combustible", "low fuel", "emergencia combustible", "tanks", "fuel mínimo", "reserva fuel"],
+  "sector_tags": ["cockpit", "plataforma", "combustible", "torre de control"],
+  "aircraft_tags": ["general"],
+  "severity": "CRÍTICO",
+  "requiresEmergencyCall": true,
+  "fuente": "OACI Anexo 6 / Regulaciones ANAC RA 91",
+  "steps": [
+    "Declarar MAYDAY FUEL si la reserva es menor a la final (45 min en vuelo IFR).",
+    "Informá a ATC: 'MAYDAY MAYDAY MAYDAY, [indicativo], combustible mínimo'.",
+    "Solicitá prioridad de aterrizaje y vectores directos al aeropuerto más cercano.",
+    "Activá checklist de emergencia de combustible según tipo de aeronave.",
+    "Notificá a cabina y preparar pasajeros si la situación lo requiere."
+  ],
+  "warnings": [
+    "MAYDAY FUEL se declara ANTES de alcanzar el mínimo, no después.",
+    "No demorés la declaración por presión operacional — la decisión es del comandante."
+  ]
+}
