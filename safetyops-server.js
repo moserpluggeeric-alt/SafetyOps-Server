@@ -244,13 +244,22 @@ CATEGORÍAS (elegí EXACTAMENTE una):
 - "Otro": no encaja en ninguna categoría anterior
 
 GUÍA DE CLASIFICACIÓN (basada en EVAIR):
-- Incendio a bordo → "Técnico" (salvo que sea por error de tripulación → "Factor Humano")
+- Fuego, incendio, llamas, humo a bordo, smoke on board → SIEMPRE "Técnico". Sin excepción.
 - Incursión en pista → "Seguridad Aeroportuaria"
-- TCAS RA → "ATC / Espacio Aéreo"
-- Bird strike → "Técnico"
-- Aproximación inestable continuada → "Factor Humano"
+- TCAS RA, conflicto de tráfico → "ATC / Espacio Aéreo"
+- Bird strike, colisión aviar → "Técnico"
+- Aproximación inestable continuada por decisión de tripulación → "Factor Humano"
 - Mal tiempo que afecta operación → "Meteorología"
-- Falla hidráulica / eléctrica → "Técnico"
+- Falla hidráulica / eléctrica / motores / aviónica → "Técnico"
+- Descompresión, pérdida de presurización → "Técnico"
+
+EJEMPLOS OBLIGATORIOS (aprendé de estos):
+- "fuego en el avion" → "Técnico"
+- "humo en cabina" → "Técnico"
+- "incendio a bordo" → "Técnico"
+- "bird strike en ascenso" → "Técnico"
+- "piloto no siguió procedimiento" → "Factor Humano"
+- "windshear en aproximación" → "Meteorología"
 
 ESCALAS DE RIESGO (ICAO/ANAC):
 - severidad: "Catastrófico" | "Crítico" | "Marginal" | "Insignificante"
