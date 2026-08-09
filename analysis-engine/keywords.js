@@ -244,7 +244,15 @@ const KW={
     "extintor activado fuego","fire extinguisher discharged confirmed","descarga de extintor por fuego",
     "fire warning light","luz de incendio","alarma de incendio confirmada","fire alarm confirmed",
     "evacuación por incendio","evacuation fire","evacuación de emergencia por fuego",
-    "incendio en tierra","ground fire","aeronave en llamas","burning aircraft"
+    "incendio en tierra","ground fire","aeronave en llamas","burning aircraft",
+    // frases genéricas frecuentes — evitan que NB domine con FH
+    "fuego en el avion","fuego en el avión","fuego en avion","fuego en avión",
+    "fuego en la aeronave","fuego a bordo","fuego abordo","hay fuego","se declaró fuego",
+    "se detectó fuego","se ve fuego","olor a quemado","olor a humo","humo en cabina",
+    "humo en cabina de pasajeros","humo en cockpit","humo en cabina de pilotaje",
+    "incendio a bordo","fire on board","fire in aircraft","fire aboard","aircraft on fire",
+    "avion en llamas","avión en llamas","aeronave en llamas","plane on fire",
+    "se incendió","se prendió fuego","prendio fuego","llamas a bordo","smoke on board"
   ],
   // ── ESTELA TURBULENTA / WAKE VORTEX ─────────────────────────────────────
   "Estela Turbulenta":[

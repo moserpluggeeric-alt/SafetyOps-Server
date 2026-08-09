@@ -84,6 +84,24 @@ function clasificar(text, lang) {
   const nbSorted=Object.entries(nbRaw).sort((a,b)=>b[1]-a[1]);
   if(nbSorted.length) _trazas.push({capa:'NB',termino:'ranking NB',categoria:nbSorted[0][0],peso:null,info:'NB top-1: '+nbSorted[0][0]+' · top-2: '+(nbSorted[1]?nbSorted[1][0]:'—')});
 
+  // Capa 6: Anchor override — términos inambiguos que dominan sobre NB sesgado
+  // Si la descripción contiene un término âncora de categoría específica,
+  // se aplica un boost fuerte para que la evidencia léxica supere al NB.
+  const _ANCHORS=[
+    {pat:/\b(fuego|incendio|incendio|llamas|fire|humo a bordo|humo en cabina|humo en cockpit|smoke on board|fire on board|aircraft on fire|olor a quemado|se prendio)\b/i, cat:'Incendio',     boost:3.5},
+    {pat:/\b(bird strike|pájaros|aves|colisión aviar|ave impact|pájaro en motor)\b/i,                    cat:'Bird Strike',   boost:3.5},
+    {pat:/\b(tcas ra|resolution advisory|tráfico cercano|conflicto de tráfico)\b/i,                      cat:'TCAS RA',       boost:3.5},
+    {pat:/\b(gpws|terrain pull up|pull up terrain|too low terrain|sink rate)\b/i,                        cat:'GPWS',          boost:3.5},
+    {pat:/\b(médico|emergencia médica|pasajero inconsciente|pasajero fallecido|ataque al corazón)\b/i,  cat:'Emergencia Médica', boost:3.5},
+    {pat:/\b(descompresión|presurización|pérdida de presión|cabin pressure|presión cabina)\b/i,         cat:'Presurización', boost:3.5},
+  ];
+  for(const a of _ANCHORS){
+    if(a.pat.test(t)){  // testear sobre texto preprocesado (sin tildes) para que \b funcione
+      scores[a.cat]=(scores[a.cat]||0)+a.boost;
+      _trazas.push({capa:'ANCHOR',termino:a.cat,peso:a.boost,info:'Anchor override → '+a.cat+' (+'+a.boost+')'});
+    }
+  }
+
   const total=Object.values(scores).reduce((s,v)=>s+v,0);
   // Catch-all: si no hay keywords, verificar términos genéricos de aviación (mín. 2)
   if(total===0){
