@@ -768,7 +768,7 @@ async function handlePostReport(req, res, origin) {
   let body;
   try {
     body = JSON.parse(raw);
-    TRACE( 3, 'JSON parse OK',                  { fn: _fn, keys: Object.keys(body), textoLen: report.texto ? report.texto.length : 0, area: report.area, identidad: report.identidad, elapsed: Date.now() - _t0 });
+    TRACE( 3, 'JSON parse OK',                  { fn: _fn, keys: Object.keys(body), textoLen: body.texto ? body.texto.length : 0, area: body.area, identidad: body.identidad, elapsed: Date.now() - _t0 });
   } catch (err) {
     TRACE( 3, 'ERROR JSON parse failed — early return 400', { fn: _fn, reason: err.message, rawSlice: raw.slice(0, 100), elapsed: Date.now() - _t0 });
     return sendJSON(res, 400, { error: 'invalid_json', message: 'Request body must be valid JSON.' }, origin);
