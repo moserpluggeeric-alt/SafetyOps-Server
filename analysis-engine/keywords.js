@@ -1489,7 +1489,7 @@ const CONCEPT_PATTERNS=[
 // SYNONYMS: líneas 4232-4314
 const SYNONYMS=[
   // Aeronave / avión
-  [/\b(avion|airplane|plane|bird|the plane|el avion)\b/g,'aeronave'],
+  [/\b(avion|airplane|plane|the plane|el avion)\b/g,'aeronave'],
   [/\b(motores)\b/g,'motor'],  // plural → singular cubre ambos
   [/\b(turbinas)\b/g,'turbina'],
   [/\b(engines)\b/g,'motor'],
