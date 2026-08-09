@@ -130,10 +130,23 @@ function dbSaveReport(occ) {
 
 // ── API Key middleware ────────────────────────────────────────────────────────
 // Checks Authorization: Bearer <key>  OR  x-api-key: <key>
-// Key is read from API_SECRET_KEY env var; defaults to pilot value.
-const API_SECRET_KEY = process.env.API_SECRET_KEY || 'safetyops-pilot-2026';
+// Key comes exclusively from API_SECRET_KEY env var (Railway Variables).
+// If not set: endpoints return 503 — no open fallback, ever.
+// Beta credential: set API_SECRET_KEY in Railway and share it with authorized clients.
+const API_SECRET_KEY = process.env.API_SECRET_KEY || null;
+if (!API_SECRET_KEY) {
+  console.error('[API] ❌ API_SECRET_KEY not configured. Protected endpoints will return 503 until this is set in Railway Variables.');
+}
 
 function requireApiKey(req, res, origin) {
+  if (!API_SECRET_KEY) {
+    // Misconfiguration — refuse all requests rather than open the API.
+    sendJSON(res, 503, {
+      error:   'misconfigured',
+      message: 'Server not configured. Contact the administrator.',
+    }, origin);
+    return false;
+  }
   const auth = req.headers['authorization'] || '';
   const xkey = req.headers['x-api-key']     || '';
   const provided = auth.startsWith('Bearer ')
@@ -417,7 +430,7 @@ function corsHeaders(requestOrigin) {
   const hdrs = {
     'Access-Control-Allow-Origin':  origin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-api-key',
     'Content-Type':                 'application/json',
   };
   // Only add Vary when we're doing per-origin access control.
