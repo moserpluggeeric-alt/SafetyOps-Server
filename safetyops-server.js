@@ -199,6 +199,9 @@ async function handleIngestReport(req, res, origin) {
     }
   }
 
+  // 8b. Derive source — _anonimo=true is set by all movil-mode routes in the frontend
+  if (occ._anonimo === true) occ._fromMobile = true;
+
   // 9. Server-generated folio — client folio ignored, uniqueness guaranteed by _nextReportId
   occ.folio       = 'OCC-' + (1000 + _nextReportId++);
   if (!occ.fecha) occ.fecha = new Date().toISOString().slice(0, 10);
