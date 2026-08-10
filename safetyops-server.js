@@ -99,6 +99,14 @@ db.serialize(() => {
   //         VALUES ('admin', ?, 'admin')`, [adminHash]);
   */
   // ── Fin skeleton users ──────────────────────────────────────────────────
+
+  // ── Initialize _nextReportId from DB max so folios survive server restarts ──
+  db.get('SELECT MAX(id) AS maxId FROM reports', function(err, row) {
+    if (!err && row && row.maxId) {
+      _nextReportId = row.maxId + 1;
+      console.log('[DB] _nextReportId initialized to ' + _nextReportId + ' from existing records');
+    }
+  });
 });
 
 /** Persist one report — fire and forget, errors logged only. */
@@ -128,6 +136,100 @@ function dbSaveReport(occ) {
   });
 }
 
+// ── POST /api/v1/ingest ───────────────────────────────────────────────────────
+// Public write-only endpoint for frontend report submission (web + mobile).
+// Protected by INGEST_TOKEN (not API_SECRET_KEY). No read access granted.
+// Origin-restricted to the Netlify frontend as a secondary defense layer.
+async function handleIngestReport(req, res, origin) {
+  // 1. Origin check (defense in depth — CORS is not auth, but reduces noise)
+  if (origin !== _INGEST_ALLOWED_ORIGIN) {
+    console.warn('[ingest] Rejected — unexpected origin: ' + origin);
+    return sendJSON(res, 403, { error: 'forbidden', message: 'Origin no permitido.' }, origin);
+  }
+
+  // 2. INGEST_TOKEN validation
+  if (!INGEST_TOKEN) {
+    return sendJSON(res, 503, { error: 'not_configured', message: 'Ingest endpoint not configured.' }, origin);
+  }
+  const providedToken = (req.headers['x-ingest-token'] || '').trim();
+  if (!providedToken || providedToken !== INGEST_TOKEN) {
+    console.warn('[ingest] Rejected — invalid or missing X-Ingest-Token from ' + origin);
+    return sendJSON(res, 401, { error: 'unauthorized', message: 'Token de ingestión requerido.' }, origin);
+  }
+
+  // 3. Rate limiting by IP
+  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  if (!_checkIngestRate(ip)) {
+    return sendJSON(res, 429, { error: 'rate_limit', message: 'Demasiadas solicitudes. Intentá en unos minutos.' }, origin);
+  }
+
+  // 4. Read body with size guard
+  let raw;
+  try { raw = await readBody(req); }
+  catch (err) { return sendJSON(res, 413, { error: 'payload_too_large' }, origin); }
+  if (raw.length > 65536) {
+    return sendJSON(res, 413, { error: 'payload_too_large', message: 'Payload supera el límite de 64 KB.' }, origin);
+  }
+
+  // 5. Parse JSON
+  let body;
+  try { body = JSON.parse(raw); }
+  catch (err) { return sendJSON(res, 400, { error: 'invalid_json', message: 'Body debe ser JSON válido.' }, origin); }
+
+  // 6. Required field: texto
+  const texto = (body.texto || '').toString().trim();
+  if (texto.length < 10) {
+    return sendJSON(res, 400, { error: 'texto_too_short', message: 'El campo "texto" debe tener al menos 10 caracteres.' }, origin);
+  }
+
+  // 7. Build occ from whitelist only — strip everything else
+  const occ = {};
+  for (const k of _INGEST_WHITELIST) {
+    if (body[k] !== undefined) occ[k] = body[k];
+  }
+  occ.texto = texto.slice(0, 3000); // enforce max length
+
+  // 8. Validate _geo if present
+  if (occ._geo) {
+    const lat = occ._geo.lat;
+    const lon = occ._geo.lon;
+    if (typeof lat !== 'number' || typeof lon !== 'number' ||
+        lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      delete occ._geo; // silently drop invalid geo
+    }
+  }
+
+  // 9. Server-generated folio — client folio ignored, uniqueness guaranteed by _nextReportId
+  occ.folio       = 'OCC-' + (1000 + _nextReportId++);
+  if (!occ.fecha) occ.fecha = new Date().toISOString().slice(0, 10);
+  occ._fromFrontend = true;
+  occ._ingestedAt   = new Date().toISOString();
+  occ.estado        = occ.estado || 'Reportada';
+
+  // 10. Persist — same path as all other report flows
+  _storedReports.unshift(occ);
+  if (_storedReports.length > _STORED_REPORTS_MAX) _storedReports.length = _STORED_REPORTS_MAX;
+  dbSaveReport(occ);
+
+  // 11. WS push to desktop SafetyOps_v2 if connected
+  if (isEngineConnected()) {
+    try {
+      engineSocket.send(JSON.stringify({ type: 'new_report', data: occ }));
+      console.log('[ingest] new_report pushed to desktop — folio=' + occ.folio);
+    } catch (e) {
+      console.warn('[ingest] WS push failed:', e.message);
+    }
+  }
+
+  console.log('[ingest] OK — folio=' + occ.folio + ' cat=' + (occ.categoria || '—') + ' area=' + (occ.area || '—') + ' ip=' + ip);
+  return sendJSON(res, 200, {
+    ok:          true,
+    folio:       occ.folio,
+    categoria:   occ.categoria   || null,
+    nivel_riesgo: occ.nivel_riesgo || null,
+  }, origin);
+}
+
 // ── API Key middleware ────────────────────────────────────────────────────────
 // Checks Authorization: Bearer <key>  OR  x-api-key: <key>
 // Key comes exclusively from API_SECRET_KEY env var (Railway Variables).
@@ -137,6 +239,36 @@ const API_SECRET_KEY = process.env.API_SECRET_KEY || null;
 if (!API_SECRET_KEY) {
   console.error('[API] ❌ API_SECRET_KEY not configured. Protected endpoints will return 503 until this is set in Railway Variables.');
 }
+
+// ── Ingest token — separate from API_SECRET_KEY, write-only scope ─────────────
+// Allows frontend (web + mobile) to POST reports without exposing API_SECRET_KEY.
+// Set INGEST_TOKEN in Railway Variables. Distribute to beta participants only.
+// Does NOT grant access to GET /api/v1/reports, /stats, or POST /api/v1/sync.
+const INGEST_TOKEN = process.env.INGEST_TOKEN || null;
+if (!INGEST_TOKEN) {
+  console.warn('[API] ⚠ INGEST_TOKEN not set — POST /api/v1/ingest will reject all requests until configured in Railway Variables.');
+}
+
+// ── In-memory rate limiter for /api/v1/ingest ─────────────────────────────────
+const _ingestRateMap = new Map();
+function _checkIngestRate(ip) {
+  const now = Date.now();
+  const WIN_MS = 10 * 60 * 1000; // 10-minute window
+  const MAX_HITS = 20;            // max 20 requests per window per IP
+  const hits = (_ingestRateMap.get(ip) || []).filter(function(t) { return now - t < WIN_MS; });
+  hits.push(now);
+  _ingestRateMap.set(ip, hits);
+  return hits.length <= MAX_HITS;
+}
+
+// Allowed origin for /api/v1/ingest (defense in depth — not a substitute for token auth)
+const _INGEST_ALLOWED_ORIGIN = 'https://safettyops.netlify.app';
+
+// Whitelist of fields accepted from the frontend — all others are silently stripped
+const _INGEST_WHITELIST = new Set([
+  'texto', 'area', 'categoria', 'nivel_riesgo', 'confianza', 'fecha',
+  'fase', 'lugar', 'matricula', 'vuelo', '_anonimo', '_geo', 'origen'
+]);
 
 function requireApiKey(req, res, origin) {
   if (!API_SECRET_KEY) {
@@ -398,7 +530,9 @@ function normalizeReport(raw) {
 /** The single authenticated WebSocket from SafetyOps_v2.html. */
 let engineSocket = null;
 
-/** Auto-increment counter for local engine folio numbers. */
+/** Auto-increment counter for local engine folio numbers.
+ *  Initialized at boot from SELECT MAX(id) so folios are unique across server restarts.
+ */
 let _nextReportId = 1;
 
 /**
@@ -973,6 +1107,9 @@ const server = http.createServer(async (req, res) => {
   if (method === 'GET'  && url.startsWith('/api/v1/reports')) {
     if (!requireApiKey(req, res, origin)) return;
     return handleGetReports(req, res, origin);
+  }
+  if (method === 'POST' && url === '/api/v1/ingest') {
+    return handleIngestReport(req, res, origin);
   }
   if (method === 'POST' && url === '/api/v1/sync') {
     if (!requireApiKey(req, res, origin)) return;
