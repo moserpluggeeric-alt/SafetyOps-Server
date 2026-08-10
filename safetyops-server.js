@@ -567,7 +567,7 @@ function corsHeaders(requestOrigin) {
   const hdrs = {
     'Access-Control-Allow-Origin':  origin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-api-key',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-api-key, X-Ingest-Token',
     'Content-Type':                 'application/json',
   };
   // Only add Vary when we're doing per-origin access control.
