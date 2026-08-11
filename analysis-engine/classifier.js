@@ -87,13 +87,24 @@ function clasificar(text, lang) {
   // Capa 6: Anchor override — términos inambiguos que dominan sobre NB sesgado
   // Si la descripción contiene un término âncora de categoría específica,
   // se aplica un boost fuerte para que la evidencia léxica supere al NB.
+  function _ba(terms,cat,boost){
+    const pat=new RegExp('\\b('+terms.map(_norm).join('|')+')\\b','i');
+    return{pat,cat,boost};
+  }
   const _ANCHORS=[
-    {pat:/\b(fuego|incendio|incendio|llamas|fire|humo a bordo|humo en cabina|humo en cockpit|smoke on board|fire on board|aircraft on fire|olor a quemado|se prendio)\b/i, cat:'Incendio',     boost:3.5},
-    {pat:/\b(bird strike|pájaros|aves|colisión aviar|ave impact|pájaro en motor)\b/i,                    cat:'Bird Strike',   boost:3.5},
-    {pat:/\b(tcas ra|resolution advisory|tráfico cercano|conflicto de tráfico)\b/i,                      cat:'TCAS RA',       boost:3.5},
-    {pat:/\b(gpws|terrain pull up|pull up terrain|too low terrain|sink rate)\b/i,                        cat:'GPWS',          boost:3.5},
-    {pat:/\b(médico|emergencia médica|pasajero inconsciente|pasajero fallecido|ataque al corazón)\b/i,  cat:'Emergencia Médica', boost:3.5},
-    {pat:/\b(descompresión|presurización|pérdida de presión|cabin pressure|presión cabina)\b/i,         cat:'Presurización', boost:3.5},
+    // Seguridad Aeroportuaria — armas: prioridad sobre Incendio (boost 5.0 > 3.5)
+    // "arma de fuego" contiene el token "fuego" que dispararía el anchor de Incendio
+    // Este anchor debe ir PRIMERO y con boost mayor para ganar en cualquier texto de armas
+    _ba(['arma de fuego','arma a bordo','pasajero con arma','pasajero armado'],'Seguridad Aeroportuaria',5.0),
+    _ba(['fuego','incendio','llamas','fire','humo a bordo','humo en cabina','humo en cockpit','smoke on board','fire on board','aircraft on fire','olor a quemado','se prendio'],'Incendio',3.5),
+    _ba(['bird strike','pajaros','aves','colision aviar','ave impact','pajaro en motor'],'Bird Strike',3.5),
+    _ba(['tcas ra','resolution advisory','trafico cercano','conflicto de trafico'],'TCAS RA',3.5),
+    _ba(['gpws','terrain pull up','pull up terrain','too low terrain','sink rate'],'GPWS',3.5),
+    _ba(['medico','emergencia medica','pasajero inconsciente','pasajero fallecido','ataque al corazon'],'Emergencia Médica',3.5),
+    _ba(['descompresion','presurizacion','perdida de presion','cabin pressure','presion cabina'],'Presurización',3.5),
+    // Falla Técnica — "falla del motor" no matchea keyword "falla de motor" (artículo "del")
+    // Sin este anchor, NB vota Factores Humanos y gana por defecto
+    _ba(['falla del motor','falla en el motor','falla en motores','engine failure','perdimos un motor','motor apagado'],'Falla Técnica',3.5),
   ];
   for(const a of _ANCHORS){
     if(a.pat.test(t)){  // testear sobre texto preprocesado (sin tildes) para que \b funcione
