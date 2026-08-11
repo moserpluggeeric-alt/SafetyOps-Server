@@ -100,6 +100,22 @@ db.serialize(() => {
   */
   // ── Fin skeleton users ──────────────────────────────────────────────────
 
+  // ── demo_tokens — per-company tokens for /api/v1/ingest ──────────────────────
+  // token_hash: SHA-256 hex of the plaintext token (never stored in plaintext)
+  // status: 'ACTIVO' | 'REVOCADO' | 'EXPIRADO'
+  // expires_at: ISO-8601 date string or NULL (no expiry)
+  db.run(`CREATE TABLE IF NOT EXISTS demo_tokens (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    token_hash   TEXT    NOT NULL UNIQUE,
+    label        TEXT    NOT NULL,
+    status       TEXT    NOT NULL DEFAULT 'ACTIVO',
+    expires_at   TEXT,
+    created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+    last_used_at TEXT
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS idx_demo_tokens_hash   ON demo_tokens(token_hash)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_demo_tokens_status ON demo_tokens(status)');
+
   // ── Initialize _nextReportId from DB max so folios survive server restarts ──
   db.get('SELECT MAX(id) AS maxId FROM reports', function(err, row) {
     if (!err && row && row.maxId) {
@@ -136,9 +152,101 @@ function dbSaveReport(occ) {
   });
 }
 
+// ── Demo Token helpers ────────────────────────────────────────────────────────
+// Token hashing — SHA-256, never log or store plaintext.
+function _hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+// Validate ISO-8601 date string (YYYY-MM-DD or full datetime). null/undefined → valid (no expiry).
+function _isValidISODate(s) {
+  if (s === null || s === undefined) return true;
+  return typeof s === 'string' &&
+    /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})?)?$/.test(s) &&
+    !isNaN(Date.parse(s));
+}
+
+// Validate a demo token against the DB. Calls cb({ ok, id?, label?, reason? }).
+// Auto-updates status to 'EXPIRADO' if expires_at is in the past.
+// Never logs the token plaintext.
+function _validateDemoToken(token, cb) {
+  const hash = _hashToken(token);
+  db.get(
+    `SELECT id, label, status, expires_at FROM demo_tokens WHERE token_hash = ?`,
+    [hash],
+    function(err, row) {
+      if (err || !row) return cb({ ok: false, reason: 'not_found' });
+      if (row.expires_at && row.expires_at < new Date().toISOString()) {
+        db.run(`UPDATE demo_tokens SET status='EXPIRADO' WHERE id=?`, [row.id]);
+        return cb({ ok: false, reason: 'demo_expired', label: row.label });
+      }
+      if (row.status !== 'ACTIVO') {
+        const reason = row.status === 'REVOCADO' ? 'demo_access_revoked' : 'demo_expired';
+        return cb({ ok: false, reason, label: row.label });
+      }
+      db.run(`UPDATE demo_tokens SET last_used_at=datetime('now') WHERE id=?`, [row.id]);
+      return cb({ ok: true, id: row.id, label: row.label });
+    }
+  );
+}
+
+// ── MEJORA 7: Aviation Context Validation Layer ───────────────────────────────
+// Runs server-side after MEJORA 6. Decides whether to auto-accept the
+// classification or route to human review (categoria=null, status='Revisión requerida').
+//
+// Rules (ordered):
+//   R1 ANCHOR     — any anchor fired → auto-accept (unambiguous signal)
+//   R2 STRONG_LEX — kwHits+adrepHits ≥ 2 AND conf ≥ 0.55
+//   R3 CTX_LEX    — ctxStrict AND kw+adrep ≥ 1 AND mom ≥ 0.10 AND conf ≥ 0.50
+//                   AND NOT FH_guard (Factores Humanos with <2 hits is NB default)
+//   R4 HIGH_CONF  — conf ≥ 0.65 AND mom ≥ 0.12 AND NOT FH_guard
+//   ELSE          → REVISIÓN REQUERIDA
+const _M7_AV_STRICT = [
+  'aeronave','aeronaves','vuelo','vuelos','aeropuerto','piloto','pilotos',
+  'aterrizaje','despegue','cabina','tripulacion','tripulaciones',
+  'pista','runway','aircraft','flight','atc','fir','tma','aerodromo',
+  'torre de control','approach','cockpit','copiloto','comandante',
+  'aerovia','apron','taxeo','rodaje'
+];
+function _normM7(s) {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+function simulateMejora7Server(classifyResult, texto) {
+  if (!classifyResult) return { autoAccept: false, rule: 'NULL_RESULT' };
+  if (classifyResult._noClasificable) return { autoAccept: false, rule: 'NO_CLASIF' };
+
+  const trazas = classifyResult._trazas || [];
+  const cat    = classifyResult.categoria;
+  const conf   = classifyResult.confianza || 0;
+  const scores = classifyResult._scoreDetalle || {};
+  const total  = Object.values(scores).reduce((s, v) => s + v, 0);
+  const top1   = scores[cat] || 0;
+  const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  const top2sc = sorted[1] ? sorted[1][1] : 0;
+  const mom    = total > 0 ? (top1 - top2sc) / total : 0;
+
+  const anyAnchor = trazas.some(tr => tr.capa === 'ANCHOR');
+  const kwHits    = trazas.filter(tr => tr.capa === 'KW'    && tr.categoria === cat).length;
+  const adrepHits = trazas.filter(tr => tr.capa === 'ADREP' && tr.categoria === cat).length;
+  const t = _normM7(texto);
+  const ctxStrict = _M7_AV_STRICT.some(w => t.includes(w));
+
+  // FH guard: Factores Humanos with <2 KW/ADREP hits is the NB default winner —
+  // never auto-accept via R3/R4 without solid lexical support.
+  const fhGuard = (cat === 'Factores Humanos' && kwHits + adrepHits < 2);
+
+  if (anyAnchor)                                                                return { autoAccept: true,  rule: 'R1_ANCHOR',    cat, conf, mom, kwHits, adrepHits };
+  if (kwHits + adrepHits >= 2 && conf >= 0.55)                                  return { autoAccept: true,  rule: 'R2_STRONG_LEX',cat, conf, mom, kwHits, adrepHits };
+  if (!fhGuard && ctxStrict && kwHits + adrepHits >= 1 && mom >= 0.10 && conf >= 0.50) return { autoAccept: true, rule: 'R3_CTX_LEX', cat, conf, mom, kwHits, adrepHits };
+  if (!fhGuard && conf >= 0.65 && mom >= 0.12)                                  return { autoAccept: true,  rule: 'R4_HIGH_CONF', cat, conf, mom, kwHits, adrepHits };
+  return { autoAccept: false, rule: 'REVISIÓN', cat, conf, mom, kwHits, adrepHits };
+}
+
 // ── POST /api/v1/ingest ───────────────────────────────────────────────────────
-// Public write-only endpoint for frontend report submission (web + mobile).
-// Protected by INGEST_TOKEN (not API_SECRET_KEY). No read access granted.
+// Write-only endpoint for frontend report submission (web + mobile).
+// Auth: per-company demo token (X-Ingest-Token header) verified against demo_tokens
+//       table via SHA-256 hash. Falls back to legacy INGEST_TOKEN if not found.
+// Server-side classification: runs local engine, applies MEJORA 6 + MEJORA 7.
 // Origin-restricted to the Netlify frontend as a secondary defense layer.
 async function handleIngestReport(req, res, origin) {
   // 1. Origin check (defense in depth — CORS is not auth, but reduces noise)
@@ -147,13 +255,34 @@ async function handleIngestReport(req, res, origin) {
     return sendJSON(res, 403, { error: 'forbidden', message: 'Origin no permitido.' }, origin);
   }
 
-  // 2. INGEST_TOKEN validation
-  if (!INGEST_TOKEN) {
-    return sendJSON(res, 503, { error: 'not_configured', message: 'Ingest endpoint not configured.' }, origin);
-  }
+  // 2. Auth — demo token (DB) with legacy INGEST_TOKEN fallback
   const providedToken = (req.headers['x-ingest-token'] || '').trim();
-  if (!providedToken || providedToken !== INGEST_TOKEN) {
-    console.warn('[ingest] Rejected — invalid or missing X-Ingest-Token from ' + origin);
+  if (!providedToken) {
+    console.warn('[ingest] Rejected — missing X-Ingest-Token');
+    return sendJSON(res, 401, { error: 'unauthorized', message: 'Token de ingestión requerido.' }, origin);
+  }
+
+  // Resolve auth via demo token → legacy fallback (promisified callback)
+  const authResult = await new Promise(resolve => {
+    _validateDemoToken(providedToken, result => {
+      if (result.ok) return resolve({ ok: true, via: 'demo', label: result.label, id: result.id });
+      if (result.reason !== 'not_found') return resolve({ ok: false, ...result });
+      // Not found in demo_tokens — try legacy INGEST_TOKEN
+      if (INGEST_TOKEN && providedToken === INGEST_TOKEN) return resolve({ ok: true, via: 'legacy', label: 'legacy' });
+      resolve({ ok: false, reason: 'not_found' });
+    });
+  });
+
+  if (!authResult.ok) {
+    if (authResult.reason === 'demo_access_revoked') {
+      const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+      console.warn('[ingest] Rejected — demo_access_revoked ip=' + ip);
+      return sendJSON(res, 403, { error: 'demo_access_revoked', message: 'Acceso revocado. Contactá al administrador.' }, origin);
+    }
+    if (authResult.reason === 'demo_expired') {
+      return sendJSON(res, 403, { error: 'demo_expired', message: 'Tu acceso de demostración ha vencido. Contactá al administrador.' }, origin);
+    }
+    console.warn('[ingest] Rejected — unauthorized (not_found or unknown)');
     return sendJSON(res, 401, { error: 'unauthorized', message: 'Token de ingestión requerido.' }, origin);
   }
 
@@ -209,12 +338,60 @@ async function handleIngestReport(req, res, origin) {
   occ._ingestedAt   = new Date().toISOString();
   occ.estado        = occ.estado || 'Reportada';
 
-  // 10. Persist — same path as all other report flows
+  // 10. Server-side classification + MEJORA 6 + MEJORA 7 ─────────────────────
+  // Railway is the authority. The browser's categoria is preserved as
+  // _categoria_browser for audit, but Railway decides what goes to the DB.
+  const _categoriaBrowser = occ.categoria || null; // preserve for audit trail
+  let _clasificadoPor = 'browser'; // default: accept browser classification
+
+  if (_engine) {
+    try {
+      // Run local engine on the texto (no side effects — classify only)
+      const lang = body.lang || 'es';
+      const { clasificar } = require('./analysis-engine/classifier');
+      const classifyResult = clasificar(texto, lang);
+
+      if (classifyResult) {
+        const m6Rev = classifyResult._revisarManualmente;
+        const m7    = simulateMejora7Server(classifyResult, texto);
+
+        if (m6Rev || !m7.autoAccept) {
+          // MEJORA 6 or MEJORA 7 says: route to human review
+          occ.categoria = null;
+          occ.estado    = 'Revisión requerida';
+          occ._categoria_browser = _categoriaBrowser;
+          occ._m6_revisarManualmente = m6Rev;
+          occ._m7_rule   = m7.rule;
+          occ._m7_conf   = classifyResult.confianza;
+          occ._m7_sugerencia = classifyResult.categoria; // best guess for reviewer
+          _clasificadoPor = 'server:revision';
+          console.log('[ingest] Revisión requerida — folio=' + occ.folio +
+            ' sugerencia=' + (classifyResult.categoria || '—') +
+            ' browser_cat=' + (_categoriaBrowser || '—') +
+            ' m6=' + m6Rev + ' m7_rule=' + m7.rule);
+        } else {
+          // MEJORA 7 auto-accepts: use server-side classification
+          occ.categoria = classifyResult.categoria;
+          if (!occ.nivel_riesgo) occ.nivel_riesgo = null; // let analysis-engine fill from report context
+          occ._categoria_browser = _categoriaBrowser;
+          occ._m7_rule   = m7.rule;
+          occ._m7_conf   = classifyResult.confianza;
+          _clasificadoPor = 'server:m7:' + m7.rule;
+        }
+      }
+    } catch (classifyErr) {
+      // Non-blocking: log and continue with browser's classification
+      console.warn('[ingest] classifier unavailable (non-blocking):', classifyErr.message);
+    }
+  }
+  occ._clasificadoPor = _clasificadoPor;
+
+  // 11. Persist — same path as all other report flows
   _storedReports.unshift(occ);
   if (_storedReports.length > _STORED_REPORTS_MAX) _storedReports.length = _STORED_REPORTS_MAX;
   dbSaveReport(occ);
 
-  // 11. WS push to desktop SafetyOps_v2 if connected
+  // 12. WS push to desktop SafetyOps_v2 if connected
   if (isEngineConnected()) {
     try {
       engineSocket.send(JSON.stringify({ type: 'new_report', data: occ }));
@@ -224,13 +401,99 @@ async function handleIngestReport(req, res, origin) {
     }
   }
 
-  console.log('[ingest] OK — folio=' + occ.folio + ' cat=' + (occ.categoria || '—') + ' area=' + (occ.area || '—') + ' ip=' + ip);
+  const demoLabel = authResult.label;
+  console.log('[ingest] Auth OK — demo label="' + demoLabel + '" via=' + authResult.via);
+  console.log('[ingest] OK — folio=' + occ.folio +
+    ' cat=' + (occ.categoria || 'Revisión requerida') +
+    ' clasificadoPor=' + _clasificadoPor +
+    ' area=' + (occ.area || '—') + ' ip=' + ip);
+
   return sendJSON(res, 200, {
-    ok:          true,
-    folio:       occ.folio,
-    categoria:   occ.categoria   || null,
+    ok:           true,
+    folio:        occ.folio,
+    categoria:    occ.categoria    || null,
+    estado:       occ.estado,
     nivel_riesgo: occ.nivel_riesgo || null,
+    _revisarManualmente: (occ.estado === 'Revisión requerida'),
   }, origin);
+}
+
+// ── Admin: Demo Token CRUD ────────────────────────────────────────────────────
+// Protected by API_SECRET_KEY. No token plaintext ever stored or logged.
+// POST   /api/v1/admin/demo-tokens          → create token
+// GET    /api/v1/admin/demo-tokens          → list all (no hashes exposed)
+// POST   /api/v1/admin/demo-tokens/:id/revoke   → revoke
+// POST   /api/v1/admin/demo-tokens/:id/activate → re-activate
+async function handleAdminDemoTokens(req, res, origin) {
+  const urlObj = new URL(req.url, 'http://localhost');
+  const parts  = urlObj.pathname.split('/').filter(Boolean);
+  // parts: ['api','v1','admin','demo-tokens'] or ['api','v1','admin','demo-tokens',':id','action']
+
+  // GET /api/v1/admin/demo-tokens — list
+  if (req.method === 'GET') {
+    db.all(
+      `SELECT id, label, status, expires_at, created_at, last_used_at FROM demo_tokens ORDER BY id DESC`,
+      [],
+      (err, rows) => {
+        if (err) return sendJSON(res, 500, { error: 'db_error', message: err.message }, origin);
+        sendJSON(res, 200, { ok: true, count: rows.length, tokens: rows }, origin);
+      }
+    );
+    return;
+  }
+
+  // POST /api/v1/admin/demo-tokens — create
+  if (req.method === 'POST' && parts.length === 4) {
+    let raw;
+    try { raw = await readBody(req); } catch (_) { return sendJSON(res, 400, { error: 'read_error' }, origin); }
+    let body;
+    try { body = JSON.parse(raw); } catch (_) { return sendJSON(res, 400, { error: 'invalid_json' }, origin); }
+
+    const label      = (body.label || '').toString().trim();
+    const expires_at = body.expires_at || null;
+
+    if (!label) return sendJSON(res, 400, { error: 'label_required', message: 'El campo label es obligatorio.' }, origin);
+    if (!_isValidISODate(expires_at)) return sendJSON(res, 400, { error: 'invalid_expires_at', message: 'expires_at debe ser ISO-8601 (YYYY-MM-DD) o null.' }, origin);
+
+    // Generate a cryptographically random token
+    const plaintext = 'dt-' + crypto.randomBytes(24).toString('base64url');
+    const hash      = _hashToken(plaintext);
+
+    db.run(
+      `INSERT INTO demo_tokens (token_hash, label, status, expires_at) VALUES (?,?,?,?)`,
+      [hash, label, 'ACTIVO', expires_at || null],
+      function(err) {
+        if (err) {
+          console.error('[admin/demo] Insert error:', err.message);
+          return sendJSON(res, 500, { error: 'db_error', message: err.message }, origin);
+        }
+        const id = this.lastID;
+        console.log('[admin/demo] Created — id=' + id + ' label="' + label + '" expires=' + (expires_at || 'never'));
+        // Return plaintext token ONCE — never stored, never logged beyond this point
+        sendJSON(res, 201, { ok: true, id, label, token: plaintext, expires_at: expires_at || null, message: 'Guardá este token — no se mostrará nuevamente.' }, origin);
+      }
+    );
+    return;
+  }
+
+  // POST /api/v1/admin/demo-tokens/:id/revoke or /activate
+  if (req.method === 'POST' && parts.length === 6) {
+    const tokenId = parseInt(parts[4], 10);
+    const action  = parts[5]; // 'revoke' or 'activate'
+    if (!Number.isFinite(tokenId) || !['revoke', 'activate'].includes(action)) {
+      return sendJSON(res, 404, { error: 'not_found' }, origin);
+    }
+    const newStatus = action === 'revoke' ? 'REVOCADO' : 'ACTIVO';
+    db.run(`UPDATE demo_tokens SET status='${newStatus}' WHERE id=?`, [tokenId], function(err) {
+      if (err) return sendJSON(res, 500, { error: 'db_error', message: err.message }, origin);
+      if (this.changes === 0) return sendJSON(res, 404, { error: 'not_found', message: 'Token id=' + tokenId + ' no encontrado.' }, origin);
+      console.log('[admin/demo] Updated id=' + tokenId + ' — status=' + newStatus);
+      sendJSON(res, 200, { ok: true, id: tokenId, status: newStatus }, origin);
+    });
+    return;
+  }
+
+  sendJSON(res, 404, { error: 'not_found' }, origin);
 }
 
 // ── API Key middleware ────────────────────────────────────────────────────────
@@ -592,7 +855,7 @@ function corsHeaders(requestOrigin) {
   const hdrs = {
     'Access-Control-Allow-Origin':  origin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-api-key, X-Ingest-Token',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-api-key, X-Ingest-Token, X-Demo-Token',
     'Content-Type':                 'application/json',
   };
   // Only add Vary when we're doing per-origin access control.
@@ -1156,6 +1419,12 @@ const server = http.createServer(async (req, res) => {
   }
   if (method === 'POST' && url === '/api/v1/classify') {
     return handleClassify(req, res, origin);
+  }
+
+  // ── Admin: Demo Token management (API_SECRET_KEY required) ───────────────────
+  if (url.startsWith('/api/v1/admin/demo-tokens')) {
+    if (!requireApiKey(req, res, origin)) return;
+    return handleAdminDemoTokens(req, res, origin);
   }
 
   // ── TODO Sprint 3: /api/v1/login ─────────────────────────────────────────

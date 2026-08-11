@@ -172,6 +172,20 @@ function clasificar(text, lang) {
     _scoreDetalle:Object.fromEntries(sorted.filter(e=>e[1]>0))
   };
   if(topAdrep) result.adrep=topAdrep; // Código ADREP detectado (ej: "SEC","GCOL","WILD")
+
+  // ── MEJORA 6: _revisarManualmente — condición combinada ──────────────────────
+  // Railway usa este flag para decidir si persiste la categoría del browser o
+  // fuerza categoria=null + status='Revisión requerida'.
+  // Path 1: ninguna capa KW/ADREP activa (texto sin vocabulario aeronáutico)
+  // Path 2: no anchor + winner sin soporte KW/ADREP + conf baja
+  const _m6_anyKwOrAdrep = _trazas.some(tr=>tr.capa==='KW'||tr.capa==='ADREP');
+  const _m6_anyAnchor    = _trazas.some(tr=>tr.capa==='ANCHOR');
+  const _m6_kwWinner     = _trazas.filter(tr=>tr.capa==='KW'   &&tr.categoria===top[0]).length;
+  const _m6_adrepWinner  = _trazas.filter(tr=>tr.capa==='ADREP'&&tr.categoria===top[0]).length;
+  const _m6_path1 = !_m6_anyAnchor && !_m6_anyKwOrAdrep;
+  const _m6_path2 = !_m6_anyAnchor && conf<0.40 && (_m6_kwWinner+_m6_adrepWinner===0);
+  result._revisarManualmente = _m6_path1 || _m6_path2;
+
   return result;
 }
 
