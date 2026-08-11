@@ -292,6 +292,31 @@ function requireApiKey(req, res, origin) {
   return false;
 }
 
+// ── BETA: read-only access via INGEST_TOKEN ────────────────────────────────────
+// Temporary mechanism for the closed beta (piloto 2026-08-25).
+// Allows GET /api/v1/reports to be authenticated with X-Ingest-Token in addition
+// to the full API_SECRET_KEY. Scope is intentionally narrow: read-only, GET only.
+// POST /api/v1/reports, /sync, /stats still require API_SECRET_KEY exclusively.
+// TODO: replace with a dedicated read-only key before public release.
+function requireApiKeyOrIngestToken(req, res, origin) {
+  // Check full API key first (same logic as requireApiKey)
+  if (API_SECRET_KEY) {
+    const auth     = req.headers['authorization'] || '';
+    const xkey     = req.headers['x-api-key']     || '';
+    const provided = auth.startsWith('Bearer ') ? auth.slice(7).trim() : xkey.trim();
+    if (provided === API_SECRET_KEY) return true;
+  }
+  // BETA fallback: accept valid INGEST_TOKEN for read-only GET access
+  const ingestToken = (req.headers['x-ingest-token'] || '').trim();
+  if (INGEST_TOKEN && ingestToken && ingestToken === INGEST_TOKEN) {
+    console.log('[API][BETA] GET /api/v1/reports autenticado con X-Ingest-Token');
+    return true;
+  }
+  // No valid credential
+  sendJSON(res, 401, { error: 'unauthorized', message: 'Token requerido.' }, origin);
+  return false;
+}
+
 // ── 7-day purge — runs every 24 h ────────────────────────────────────────────
 setInterval(() => {
   db.run(
@@ -1108,7 +1133,8 @@ const server = http.createServer(async (req, res) => {
     return handlePostReport(req, res, origin);
   }
   if (method === 'GET'  && url.startsWith('/api/v1/reports')) {
-    if (!requireApiKey(req, res, origin)) return;
+    // BETA: accepts X-Ingest-Token in addition to API_SECRET_KEY (read-only)
+    if (!requireApiKeyOrIngestToken(req, res, origin)) return;
     return handleGetReports(req, res, origin);
   }
   if (method === 'POST' && url === '/api/v1/ingest') {
