@@ -242,6 +242,46 @@ function simulateMejora7Server(classifyResult, texto) {
   return { autoAccept: false, rule: 'REVISIÓN', cat, conf, mom, kwHits, adrepHits };
 }
 
+// ── Shared MEJORA 6 + MEJORA 7 classification ─────────────────────────────────
+// Called by both /ingest and /sync. Mutates occ in place and returns metadata.
+// Returns { applied: bool, rule: string, revisarManualmente: bool }
+// Never throws — all errors are non-blocking (logged + applied=false returned).
+function _applyServerClassification(texto, occ, lang) {
+  if (!_engine) return { applied: false, rule: 'NO_ENGINE' };
+  const _catBrowser = occ.categoria || null;
+  try {
+    const { clasificar } = require('./analysis-engine/classifier');
+    const classifyResult  = clasificar(texto, lang || 'es');
+    if (!classifyResult)  return { applied: false, rule: 'NO_RESULT' };
+
+    const m6Rev = classifyResult._revisarManualmente;
+    const m7    = simulateMejora7Server(classifyResult, texto);
+
+    if (m6Rev || !m7.autoAccept) {
+      // MEJORA 6 or MEJORA 7: route to human review
+      occ.categoria              = null;
+      occ.estado                 = 'Revisión requerida';
+      occ._categoria_browser     = _catBrowser;
+      occ._m6_revisarManualmente = m6Rev;
+      occ._m7_rule               = m7.rule;
+      occ._m7_conf               = classifyResult.confianza;
+      occ._m7_sugerencia         = classifyResult.categoria;
+      occ._clasificadoPor        = 'server:revision';
+    } else {
+      // MEJORA 7 auto-accepts: Railway is the authority
+      occ.categoria          = classifyResult.categoria;
+      occ._categoria_browser = _catBrowser;
+      occ._m7_rule           = m7.rule;
+      occ._m7_conf           = classifyResult.confianza;
+      occ._clasificadoPor    = 'server:m7:' + m7.rule;
+    }
+    return { applied: true, rule: m7.rule, revisarManualmente: m6Rev || !m7.autoAccept };
+  } catch (err) {
+    console.warn('[classify] non-blocking error:', err.message);
+    return { applied: false, rule: 'EXCEPTION' };
+  }
+}
+
 // ── POST /api/v1/ingest ───────────────────────────────────────────────────────
 // Write-only endpoint for frontend report submission (web + mobile).
 // Auth: per-company demo token (X-Ingest-Token header) verified against demo_tokens
@@ -341,50 +381,21 @@ async function handleIngestReport(req, res, origin) {
   // 10. Server-side classification + MEJORA 6 + MEJORA 7 ─────────────────────
   // Railway is the authority. The browser's categoria is preserved as
   // _categoria_browser for audit, but Railway decides what goes to the DB.
-  const _categoriaBrowser = occ.categoria || null; // preserve for audit trail
-  let _clasificadoPor = 'browser'; // default: accept browser classification
-
-  if (_engine) {
-    try {
-      // Run local engine on the texto (no side effects — classify only)
-      const lang = body.lang || 'es';
-      const { clasificar } = require('./analysis-engine/classifier');
-      const classifyResult = clasificar(texto, lang);
-
-      if (classifyResult) {
-        const m6Rev = classifyResult._revisarManualmente;
-        const m7    = simulateMejora7Server(classifyResult, texto);
-
-        if (m6Rev || !m7.autoAccept) {
-          // MEJORA 6 or MEJORA 7 says: route to human review
-          occ.categoria = null;
-          occ.estado    = 'Revisión requerida';
-          occ._categoria_browser = _categoriaBrowser;
-          occ._m6_revisarManualmente = m6Rev;
-          occ._m7_rule   = m7.rule;
-          occ._m7_conf   = classifyResult.confianza;
-          occ._m7_sugerencia = classifyResult.categoria; // best guess for reviewer
-          _clasificadoPor = 'server:revision';
-          console.log('[ingest] Revisión requerida — folio=' + occ.folio +
-            ' sugerencia=' + (classifyResult.categoria || '—') +
-            ' browser_cat=' + (_categoriaBrowser || '—') +
-            ' m6=' + m6Rev + ' m7_rule=' + m7.rule);
-        } else {
-          // MEJORA 7 auto-accepts: use server-side classification
-          occ.categoria = classifyResult.categoria;
-          if (!occ.nivel_riesgo) occ.nivel_riesgo = null; // let analysis-engine fill from report context
-          occ._categoria_browser = _categoriaBrowser;
-          occ._m7_rule   = m7.rule;
-          occ._m7_conf   = classifyResult.confianza;
-          _clasificadoPor = 'server:m7:' + m7.rule;
-        }
-      }
-    } catch (classifyErr) {
-      // Non-blocking: log and continue with browser's classification
-      console.warn('[ingest] classifier unavailable (non-blocking):', classifyErr.message);
+  const lang = body.lang || 'es';
+  const _ingestClassResult = _applyServerClassification(texto, occ, lang);
+  if (_ingestClassResult.applied) {
+    if (_ingestClassResult.revisarManualmente) {
+      console.log('[ingest] Revisión requerida — folio=' + occ.folio +
+        ' sugerencia=' + (occ._m7_sugerencia || '—') +
+        ' browser_cat=' + (occ._categoria_browser || '—') +
+        ' m6=' + occ._m6_revisarManualmente + ' m7_rule=' + occ._m7_rule);
+    } else {
+      console.log('[ingest] Clasificación server — folio=' + occ.folio +
+        ' cat=' + occ.categoria + ' m7_rule=' + occ._m7_rule +
+        ' browser_cat=' + (occ._categoria_browser || '—'));
     }
   }
-  occ._clasificadoPor = _clasificadoPor;
+  if (!occ._clasificadoPor) occ._clasificadoPor = 'browser';
 
   // 11. Persist — same path as all other report flows
   _storedReports.unshift(occ);
@@ -577,6 +588,31 @@ function requireApiKeyOrIngestToken(req, res, origin) {
   }
   // No valid credential
   sendJSON(res, 401, { error: 'unauthorized', message: 'Token requerido.' }, origin);
+  return false;
+}
+
+// ── Auth for POST /api/v1/sync ────────────────────────────────────────────────
+// Accepts:
+//   • API_SECRET_KEY  — admin / backend clients (Bearer or X-Api-Key)
+//   • INGEST_TOKEN    — mobile frontend, sent as "Authorization: Bearer <token>"
+//
+// Railway Variable to configure: INGEST_TOKEN=safetyops-pilot-2026
+// That matches the token hardcoded in SafetyOps_v2.html localStorage fallback.
+function requireApiKeyOrSyncToken(req, res, origin) {
+  const auth     = req.headers['authorization'] || '';
+  const xkey     = req.headers['x-api-key']     || '';
+  const provided = auth.startsWith('Bearer ') ? auth.slice(7).trim() : xkey.trim();
+
+  // Full API key (admin)
+  if (API_SECRET_KEY && provided === API_SECRET_KEY) return true;
+
+  // INGEST_TOKEN via Bearer — mobile frontend uses this credential
+  if (INGEST_TOKEN && provided && provided === INGEST_TOKEN) {
+    console.log('[API][sync] Authenticated via INGEST_TOKEN (mobile frontend)');
+    return true;
+  }
+
+  sendJSON(res, 401, { error: 'unauthorized', message: 'API key o token de sincronización requerido.' }, origin);
   return false;
 }
 
@@ -998,17 +1034,38 @@ async function handleSyncReport(req, res, origin) {
   occ._fromMobile  = true;
   occ._syncedAt    = new Date().toISOString();
 
-  // ── Optional Groq re-classification ────────────────────────────────────────
-  // If GROQ_API_KEY is set, upgrade the classification with the LLM result.
+  // ── Server-side classification + MEJORA 6 + MEJORA 7 ──────────────────────
+  // Railway overrides the browser's categoria using the same pipeline as /ingest.
+  const _syncClassResult = _applyServerClassification(occ.texto, occ, 'es');
+  if (_syncClassResult.applied) {
+    if (_syncClassResult.revisarManualmente) {
+      console.log('[sync] Revisión requerida — folio=' + occ.folio +
+        ' sugerencia=' + (occ._m7_sugerencia || '—') +
+        ' browser_cat=' + (occ._categoria_browser || '—') +
+        ' m6=' + occ._m6_revisarManualmente + ' m7_rule=' + occ._m7_rule);
+    } else {
+      console.log('[sync] Clasificación server — folio=' + occ.folio +
+        ' cat=' + occ.categoria + ' m7_rule=' + occ._m7_rule +
+        ' browser_cat=' + (occ._categoria_browser || '—'));
+    }
+  }
+
+  // ── Optional Groq enrichment ───────────────────────────────────────────────
+  // When the local engine classified, Groq enriches only risk metadata
+  // (severidad / probabilidad / nivel_riesgo) without overriding categoria.
   if (GROQ_API_KEY) {
     const groqResult = await groqClassify(occ.texto, occ.area);
     if (groqResult) {
-      occ.categoria    = groqResult.categoria    || occ.categoria;
+      if (!_syncClassResult.applied) {
+        // No local engine — use Groq as the classifier fallback
+        occ.categoria       = groqResult.categoria    || occ.categoria;
+        occ._clasificadoPor = 'groq:' + GROQ_MODEL;
+      }
+      // Always allow Groq to enrich risk metadata
       occ.severidad    = groqResult.severidad    || occ.severidad;
       occ.probabilidad = groqResult.probabilidad || occ.probabilidad;
       occ.nivel_riesgo = groqResult.nivel_riesgo || occ.nivel_riesgo;
       occ._groq_resumen = groqResult.resumen     || undefined;
-      occ._clasificado_por = 'groq:' + GROQ_MODEL;
     }
   }
 
@@ -1029,8 +1086,8 @@ async function handleSyncReport(req, res, origin) {
     }
   }
 
-  console.log('[sync] Report synced — folio=' + occ.folio + ' categoria=' + occ.categoria);
-  return sendJSON(res, 200, { ok: true, folio: occ.folio, categoria: occ.categoria, nivel_riesgo: occ.nivel_riesgo }, origin);
+  console.log('[sync] Report synced — folio=' + occ.folio + ' categoria=' + occ.categoria + ' clasificadoPor=' + (occ._clasificadoPor || '—'));
+  return sendJSON(res, 200, { ok: true, folio: occ.folio, categoria: occ.categoria, nivel_riesgo: occ.nivel_riesgo, _clasificadoPor: occ._clasificadoPor }, origin);
 }
 
 /**
@@ -1404,7 +1461,7 @@ const server = http.createServer(async (req, res) => {
     return handleIngestReport(req, res, origin);
   }
   if (method === 'POST' && url === '/api/v1/sync') {
-    if (!requireApiKey(req, res, origin)) return;
+    if (!requireApiKeyOrSyncToken(req, res, origin)) return;
     return handleSyncReport(req, res, origin);
   }
   if (method === 'GET' && url.startsWith('/api/v1/airports')) {
