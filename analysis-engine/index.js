@@ -5,8 +5,13 @@
 //   1. lang    → parámetro en lugar de variable global _lang
 //   2. nextId  → parámetro en lugar de leer S.ocurrencias
 // El resultado es byte-a-byte idéntico al de _handleApiReport() para los mismos inputs.
+//
+// LEXICON V2: Este módulo usa clasificarV2 (que incluye el feature flag USE_LEXICON_V2).
+//   USE_LEXICON_V2=false (o ausente) → clasificarV2 es passthrough exacto a clasificar (V1).
+//   USE_LEXICON_V2=true              → clasificarV2 activa el pipeline Lexicon 2.0.
+//   El clasificador V1 (classifier.js) no es modificado. Rollback = eliminar la variable.
 
-const { clasificar }                          = require('./classifier');
+const { clasificarV2: clasificar }            = require('./classifier-v2');  // Edit B — Phase 2 activation prep
 const { scoreKW, SEV_KW, PROB_KW,
         CAT_ARMS_DEFAULT }                    = require('./score');
 const { nerExtract }                          = require('./ner');

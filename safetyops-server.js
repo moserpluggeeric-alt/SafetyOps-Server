@@ -250,8 +250,8 @@ function _applyServerClassification(texto, occ, lang) {
   if (!_engine) return { applied: false, rule: 'NO_ENGINE' };
   const _catBrowser = occ.categoria || null;
   try {
-    const { clasificar } = require('./analysis-engine/classifier');
-    const classifyResult  = clasificar(texto, lang || 'es');
+    const { clasificarV2 } = require('./analysis-engine/classifier-v2');  // Edit A — Phase 2 activation prep
+    const classifyResult  = clasificarV2(texto, lang || 'es');
     if (!classifyResult)  return { applied: false, rule: 'NO_RESULT' };
 
     const m6Rev = classifyResult._revisarManualmente;
@@ -697,9 +697,36 @@ try {
 // Falls back to local Naive Bayes engine when not set.
 const GROQ_API_KEY   = process.env.GROQ_API_KEY || null;
 const GROQ_MODEL     = process.env.GROQ_MODEL   || 'llama-3.1-8b-instant';
+// GROQ_MODEL_STABLE: rollback target. If new model fails gates, set GROQ_MODEL=this in Railway.
+const GROQ_MODEL_STABLE = 'llama-3.1-8b-instant';
 const GROQ_API_URL   = 'https://api.groq.com/openai/v1/chat/completions';
+// GROQ_USE_STRUCTURED_OUTPUTS: set to 'true' in Railway only after Gate 2 (Schema) passes.
+// When enabled, enforces strict JSON Schema via response_format — eliminates regex extraction.
+const GROQ_USE_STRUCTURED_OUTPUTS = process.env.GROQ_USE_STRUCTURED_OUTPUTS === 'true';
 
 const GROQ_CATEGORIES = ['Factor Humano','Técnico','Meteorología','Seguridad Aeroportuaria','ATC / Espacio Aéreo','Otro'];
+
+// JSON Schema for structured output mode — used when GROQ_USE_STRUCTURED_OUTPUTS=true.
+// Compatible with openai/gpt-oss-20b and any OpenAI-compatible model with structured outputs.
+const GROQ_OUTPUT_SCHEMA = {
+  type: 'json_schema',
+  json_schema: {
+    name:   'safety_classification',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        categoria:    { type: 'string', enum: GROQ_CATEGORIES },
+        severidad:    { type: 'string', enum: ['Catastrófico','Crítico','Marginal','Insignificante'] },
+        probabilidad: { type: 'string', enum: ['Frecuente','Probable','Remoto','Improbable','Extremadamente Improbable'] },
+        nivel_riesgo: { type: 'string', enum: ['Crítico','Alto','Medio','Bajo'] },
+        resumen:      { type: 'string' },
+      },
+      required: ['categoria','severidad','probabilidad','nivel_riesgo','resumen'],
+      additionalProperties: false,
+    },
+  },
+};
 
 async function groqClassify(texto, area) {
   if (!GROQ_API_KEY) return null;
@@ -725,13 +752,21 @@ GUÍA DE CLASIFICACIÓN (basada en EVAIR):
 - Falla hidráulica / eléctrica / motores / aviónica → "Técnico"
 - Descompresión, pérdida de presurización → "Técnico"
 
-EJEMPLOS OBLIGATORIOS (aprendé de estos):
+EJEMPLOS (lenguaje técnico y ciudadano/coloquial latinoamericano):
 - "fuego en el avion" → "Técnico"
 - "humo en cabina" → "Técnico"
 - "incendio a bordo" → "Técnico"
+- "había humo saliendo del motor" → "Técnico"
+- "se prendió fuego el motor" → "Técnico"
 - "bird strike en ascenso" → "Técnico"
+- "un pájaro entró al motor" → "Técnico"
 - "piloto no siguió procedimiento" → "Factor Humano"
+- "el copiloto estaba cansado y se olvidó el checklist" → "Factor Humano"
 - "windshear en aproximación" → "Meteorología"
+- "había mucha niebla y no se veía nada" → "Meteorología"
+- "persona en la pista" → "Seguridad Aeroportuaria"
+- "había algo tirado en la pista" → "Seguridad Aeroportuaria"
+- "casi chocamos con otro avión" → "ATC / Espacio Aéreo"
 
 ESCALAS DE RIESGO (ICAO/ANAC):
 - severidad: "Catastrófico" | "Crítico" | "Marginal" | "Insignificante"
@@ -744,48 +779,95 @@ Reporte recibido (área operacional: ${area || 'Operaciones de Vuelo'}):
 Respondé ÚNICAMENTE con un objeto JSON válido con estos campos: categoria, severidad, probabilidad, nivel_riesgo, resumen (una oración en español explicando la clasificación).
 Sin texto adicional, sin markdown, solo el JSON.`;
 
-  try {
-    const https = require('https');
-    const body  = JSON.stringify({
-      model:      GROQ_MODEL,
-      messages:   [{ role: 'user', content: prompt }],
-      max_tokens: 300,
-      temperature: 0.1,
-    });
-    const result = await new Promise((resolve, reject) => {
-      const url = new URL(GROQ_API_URL);
-      const req = https.request({
-        hostname: url.hostname,
-        path:     url.pathname,
-        method:   'POST',
-        headers: {
-          'Authorization': 'Bearer ' + GROQ_API_KEY,
-          'Content-Type':  'application/json',
-          'Content-Length': Buffer.byteLength(body),
-        },
-      }, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try { resolve(JSON.parse(data)); }
-          catch (e) { reject(new Error('Groq parse error: ' + data.slice(0, 200))); }
+  // Up to 2 attempts: retry once on JSON extraction failure (not on timeout/network).
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const _t0 = Date.now();
+      const https = require('https');
+      const requestBody = {
+        model:       GROQ_MODEL,
+        messages:    [{ role: 'user', content: prompt }],
+        max_tokens:  400,        // bumped from 300; GPT-OSS 20B may generate longer resumen
+        temperature: 0.1,
+      };
+      if (GROQ_USE_STRUCTURED_OUTPUTS) {
+        requestBody.response_format = GROQ_OUTPUT_SCHEMA;
+      }
+      const body = JSON.stringify(requestBody);
+
+      const result = await new Promise((resolve, reject) => {
+        const url = new URL(GROQ_API_URL);
+        const req = https.request({
+          hostname: url.hostname,
+          path:     url.pathname,
+          method:   'POST',
+          headers: {
+            'Authorization':  'Bearer ' + GROQ_API_KEY,
+            'Content-Type':   'application/json',
+            'Content-Length': Buffer.byteLength(body),
+          },
+        }, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => {
+            try { resolve(JSON.parse(data)); }
+            catch (e) { reject(new Error('Groq parse error: ' + data.slice(0, 200))); }
+          });
         });
+        req.on('error', reject);
+        req.setTimeout(15000, () => { req.destroy(); reject(new Error('Groq timeout')); });
+        req.write(body);
+        req.end();
       });
-      req.on('error', reject);
-      req.setTimeout(15000, () => { req.destroy(); reject(new Error('Groq timeout')); });
-      req.write(body);
-      req.end();
-    });
-    const content = result?.choices?.[0]?.message?.content || '';
-    const match   = content.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No JSON in Groq response: ' + content.slice(0, 100));
-    const parsed  = JSON.parse(match[0]);
-    console.log('[groq] Classified — categoria=' + parsed.categoria + ' nivel=' + parsed.nivel_riesgo);
-    return parsed;
-  } catch (err) {
-    console.warn('[groq] Error — falling back to local engine:', err.message);
-    return null;
+
+      const latencyMs = Date.now() - _t0;
+
+      // Check for API-level errors (e.g. model not found, rate limit)
+      if (result?.error) {
+        throw new Error('Groq API error: ' + (result.error.message || JSON.stringify(result.error)));
+      }
+
+      const content = result?.choices?.[0]?.message?.content || '';
+
+      // Extract JSON — structured outputs: content IS the JSON; freeform: regex extraction.
+      let parsed;
+      if (GROQ_USE_STRUCTURED_OUTPUTS) {
+        parsed = JSON.parse(content);
+      } else {
+        const match = content.match(/\{[\s\S]*\}/);
+        if (!match) throw new Error('No JSON in Groq response: ' + content.slice(0, 120));
+        parsed = JSON.parse(match[0]);
+      }
+
+      // Observability fields — internal only, stripped from public API responses.
+      parsed._groq_model      = GROQ_MODEL;
+      parsed._groq_latency_ms = latencyMs;
+      parsed._groq_structured = GROQ_USE_STRUCTURED_OUTPUTS;
+      parsed._groq_attempt    = attempt;
+
+      console.log('[groq] model=' + GROQ_MODEL +
+        ' structured=' + GROQ_USE_STRUCTURED_OUTPUTS +
+        ' attempt=' + attempt +
+        ' latency=' + latencyMs + 'ms' +
+        ' categoria=' + parsed.categoria +
+        ' nivel=' + parsed.nivel_riesgo);
+
+      return parsed;
+
+    } catch (err) {
+      // Only retry on JSON extraction errors — not on timeout or network failures.
+      const isRetryable = !err.message.includes('timeout') &&
+                          !err.message.includes('Groq API error') &&
+                          (err.message.includes('No JSON') || err.message.includes('JSON'));
+      if (attempt === 1 && isRetryable) {
+        console.warn('[groq] attempt=1 retryable JSON error — retrying once: ' + err.message);
+        continue;
+      }
+      console.warn('[groq] Error (attempt=' + attempt + ') — falling back to local engine:', err.message);
+      return null;
+    }
   }
+  return null;
 }
 
 // ── Diagnostic Mode ───────────────────────────────────────────────────────────
@@ -937,9 +1019,12 @@ function handleHealth(res, origin) {
     version:   API_VERSION,
     engine:    isEngineConnected() ? 'connected' : 'disconnected',
     guidance:  findGuidance ? 'loaded' : ('error: ' + _guidanceLoadError),
-    groq:      GROQ_API_KEY ? 'active' : 'not_configured',
-    uptime:    uptime(),
-    timestamp: new Date().toISOString(),
+    groq:             GROQ_API_KEY ? 'active' : 'not_configured',
+    groq_model:       GROQ_API_KEY ? GROQ_MODEL : null,
+    groq_model_stable: GROQ_MODEL_STABLE,
+    groq_structured:  GROQ_USE_STRUCTURED_OUTPUTS,
+    uptime:           uptime(),
+    timestamp:        new Date().toISOString(),
   }, origin);
 }
 
@@ -1137,8 +1222,10 @@ function handleStats(req, res, origin) {
       ok:          true,
       timestamp:   new Date().toISOString(),
       uptime_secs: Math.floor((Date.now() - SERVER_START) / 1000),
-      groq_active: !!GROQ_API_KEY,
-      groq_model:  GROQ_API_KEY ? GROQ_MODEL : null,
+      groq_active:       !!GROQ_API_KEY,
+      groq_model:        GROQ_API_KEY ? GROQ_MODEL : null,
+      groq_model_stable: GROQ_MODEL_STABLE,
+      groq_structured:   GROQ_USE_STRUCTURED_OUTPUTS,
       engine_connected: isEngineConnected(),
       reportes: {
         total:              row.total             || 0,

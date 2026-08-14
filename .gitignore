@@ -3,3 +3,6 @@ node_modules/
 .env.local
 npm-debug.log
 .DS_Store
+
+# Local backup — do not commit
+_safetyops_backup_before_openai_20260813/
