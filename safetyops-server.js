@@ -362,10 +362,263 @@ function _runGeminiShadow(texto, classifyResult, finalResult) {
       if (diffs.length > 0) {
         console.warn('[gemini-shadow][DIFF]\n' + diffs.join('\n'));
       }
+
+      // ── Risk Adapter (Phase 3) ───────────────────────────────────────────
+      // Deriva riesgo de la salida de Gemini. NO modifica occ en ningún caso.
+      // Shadow Mode: solo logging. Post-Phase 4: escribirá a occ (autorización separada).
+      const riskGemini = _deriveRisk(
+        geminiResult.categoria,
+        geminiResult.flags_seguridad,
+        geminiResult.confianza,
+        geminiResult.requiere_revision
+      );
+
+      // ── [gemini-risk-compare] ────────────────────────────────────────────
+      // Compara categoria_safetyops con categoria_gemini y risk_gemini.
+      // risk_actual (Groq) no está disponible aquí — mejora posterior (Phase 4+).
+      console.log(
+        '[gemini-risk-compare]'                                                              +
+        '\n  [SAFETYOPS/LOCAL]'                                                              +
+        '\n    categoria_safetyops='     + (categFinal || 'null — Revisión requerida')       +
+        '\n    estado='                  + estadoFinal                                        +
+        '\n  [GEMINI]'                                                                        +
+        '\n    categoria_gemini='        + (categGemini || '—')                              +
+        '\n    confianza='               + (geminiResult.confianza * 100).toFixed(0) + '%'   +
+        '\n    flags='                   + (geminiResult.flags_seguridad.join(',') || '—')   +
+        '\n    requiere_revision_gemini=' + geminiResult.requiere_revision                    +
+        '\n  [RISK GEMINI — adapter]'                                                        +
+        '\n    derived_severidad='       + (riskGemini.severidad    || 'null')               +
+        '\n    derived_probabilidad='    + (riskGemini.probabilidad || 'null')               +
+        '\n    derived_nivel_riesgo='    + (riskGemini.nivel_riesgo || 'null')               +
+        '\n    derived_revisa='          + riskGemini._revisarManualmente                    +
+        '\n    risk_source='             + riskGemini._riskSource                            +
+        '\n  [DIFFS]'                                                                         +
+        '\n    match_categoria='         + matchCat
+      );
     })
     .catch(err => {
       console.warn('[gemini-shadow][ERROR]', err.message);
     });
+}
+
+// ── Risk Adapter — Sprint 2A Phase 3 ─────────────────────────────────────────
+// _deriveRisk() transforma la salida validada de Gemini en campos de riesgo.
+//
+// CONTRATO:
+//   Input:  categoria (string), flagsSeguridad (string[]), confianza (number 0-1),
+//           requiereRevision (boolean)
+//   Output: { severidad, probabilidad, nivel_riesgo, _revisarManualmente, _riskSource }
+//
+// REGLAS ABSOLUTAS:
+//   - Pure function: mismo input → mismo output, sin side effects, sin API calls.
+//   - NO modifica occ. En Shadow Mode: resultado va únicamente a logs.
+//   - confianza NUNCA modifica severidad, probabilidad ni nivel_riesgo.
+//   - Los flags solo pueden ELEVAR la severidad, nunca bajarla.
+//   - _revisarManualmente solo puede activarse (OR), nunca desactivarse.
+//   - Categoría desconocida → { severidad:null, probabilidad:null, nivel_riesgo:null,
+//     _revisarManualmente:true, _riskSource:'UNKNOWN_CATEGORY:MANUAL_REVIEW' }.
+//
+// FUENTE: documento de diseño Sprint 2A v2, aprobado.
+// Risk Adapter MVP — valores provisionales. Requieren validación con experto SMS
+// y dataset histórico antes de convertirse en política operacional definitiva.
+
+// ── Severidad base y probabilidad default por categoría (29 ICAO) ─────────────
+// [DD] = Decisión de Diseño MVP provisional
+// [SUP] = Supuesto pendiente de validación con datos históricos
+// [ICAO] = Compatible con estructura ICAO Anexo 19 / SMS Doc 9859
+const RISK_TABLE = {
+  'TCAS RA':               { severidadBase: 'Crítico',        probabilidadDefault: 'Remoto' },       // [DD]
+  'Bird Strike':           { severidadBase: 'Marginal',       probabilidadDefault: 'Remoto' },       // [DD]
+  'Runway Excursion':      { severidadBase: 'Catastrófico',   probabilidadDefault: 'Remoto' },       // [DD]
+  'Unstable Approach':     { severidadBase: 'Crítico',        probabilidadDefault: 'Remoto' },       // [DD]
+  'Hard Landing':          { severidadBase: 'Marginal',       probabilidadDefault: 'Remoto' },       // [SUP]
+  'GPWS':                  { severidadBase: 'Marginal',       probabilidadDefault: 'Remoto' },       // [DD]
+  'Turbulencia':           { severidadBase: 'Insignificante', probabilidadDefault: 'Remoto' },       // [SUP]
+  'Meteorología Adversa':  { severidadBase: 'Marginal',       probabilidadDefault: 'Remoto' },       // [DD]
+  'Mercancías Peligrosas': { severidadBase: 'Crítico',        probabilidadDefault: 'Remoto' },       // [DD]
+  'Incidencia ATC':        { severidadBase: 'Marginal',       probabilidadDefault: 'Remoto' },       // [SUP]
+  'Incendio':              { severidadBase: 'Catastrófico',   probabilidadDefault: 'Remoto' },       // [DD]
+  'Estela Turbulenta':     { severidadBase: 'Marginal',       probabilidadDefault: 'Remoto' },       // [SUP]
+  'Iluminación Láser':     { severidadBase: 'Marginal',       probabilidadDefault: 'Remoto' },       // [SUP]
+  'Fatiga de Tripulación': { severidadBase: 'Marginal',       probabilidadDefault: 'Remoto' },       // [SUP]
+  'Error de Navegación':   { severidadBase: 'Marginal',       probabilidadDefault: 'Remoto' },       // [SUP]
+  'Ground Damage':         { severidadBase: 'Marginal',       probabilidadDefault: 'Remoto' },       // [DD]
+  'Incursión de Pista':    { severidadBase: 'Crítico',        probabilidadDefault: 'Remoto' },       // [DD]
+  'Factores Humanos':      { severidadBase: 'Insignificante', probabilidadDefault: 'Remoto' },       // [SUP]
+  // NOTA MVP: 'Falla Técnica' → Marginal es provisional. La categoría es demasiado
+  // amplia para una sola severidad (incluye desde fallas menores hasta motores).
+  // Deberá mejorarse mediante flags / subcategorías antes de política definitiva.
+  'Falla Técnica':         { severidadBase: 'Marginal',       probabilidadDefault: 'Remoto' },       // [DD] — ver nota
+  'Seguridad Aeroportuaria': { severidadBase: 'Marginal',     probabilidadDefault: 'Remoto' },       // [DD]
+  'Interferencia Ilícita': { severidadBase: 'Catastrófico',   probabilidadDefault: 'Improbable' },   // [DD]
+  'Demora Operacional':    { severidadBase: 'Insignificante', probabilidadDefault: 'Remoto' },       // [ICAO-compatible]
+  'CFIT':                  { severidadBase: 'Catastrófico',   probabilidadDefault: 'Improbable' },   // [DD]
+  'Emergencia Médica':     { severidadBase: 'Marginal',       probabilidadDefault: 'Remoto' },       // [SUP]
+  'Smoke / Humo a Bordo':  { severidadBase: 'Crítico',        probabilidadDefault: 'Remoto' },       // [DD]
+  'Pérdida de Control':    { severidadBase: 'Catastrófico',   probabilidadDefault: 'Improbable' },   // [DD]
+  'Presurización':         { severidadBase: 'Crítico',        probabilidadDefault: 'Remoto' },       // [DD]
+  'Fuel / Combustible':    { severidadBase: 'Crítico',        probabilidadDefault: 'Remoto' },       // [DD]
+  'FOD':                   { severidadBase: 'Marginal',       probabilidadDefault: 'Remoto' },       // [SUP]
+};
+
+// ── Elevación de severidad mínima por flag ─────────────────────────────────────
+// Fuente: SAFETY_FLAG_IDS de gemini-schema.js — exactamente los 8 IDs reales.
+// Los flags solo pueden ELEVAR la severidad, nunca bajarla.
+// FIREARM y UNLAWFUL_INTERFERENCE son reglas SafetyOps/lexicon propagadas,
+// no inferencias estadísticas de Gemini.
+const FLAG_ELEVATION = {
+  'FIREARM':               'Catastrófico',  // [REG] Priority 100 SafetyOps/lexicon
+  'FIRE':                  'Catastrófico',  // [REG] Safety-critical
+  'SMOKE':                 'Crítico',       // [REG] Safety-critical — mínimo Crítico
+  'ENGINE_FAILURE':        'Crítico',       // [REG] Safety-critical — mínimo Crítico
+  'FUEL_EMERGENCY':        'Catastrófico',  // [REG] Emergencia de combustible
+  'DANGEROUS_GOODS':       'Crítico',       // [DD]  Mercancías peligrosas — mínimo Crítico
+  'DEPRESSURIZATION':      'Crítico',       // [DD]  Presurización — mínimo Crítico
+  'UNLAWFUL_INTERFERENCE': 'Catastrófico',  // [REG] Alta prioridad SafetyOps/lexicon
+};
+
+// ── Flags que fuerzan _revisarManualmente = true independientemente del riesgo ──
+const FLAG_REVISION = new Set(['FIREARM', 'UNLAWFUL_INTERFERENCE']);
+// PENDIENTE DE VALIDACIÓN SMS:
+// Evaluar si 'DEPRESSURIZATION' debe pertenecer a FLAG_REVISION y por lo tanto
+// forzar revisión manual independientemente de confianza y de si hubo elevación
+// efectiva de severidad. Actualmente DEPRESSURIZATION solo garantiza severidad
+// mínima Crítico (vía FLAG_ELEVATION) pero no activa _revisarManualmente por sí
+// solo cuando la categoría base ya es Crítico o superior y Gemini no solicitó
+// revisión. Decisión pospuesta hasta validación con experto SMS y dataset histórico.
+
+// ── Matriz ICAO: severidad × probabilidad → nivel_riesgo ──────────────────────
+// Fuente: ICAO Anexo 19 / SMS Doc 9859.
+// Modificación aprobada Sprint 2A: Catastrófico + Remoto → 'Crítico' (vs. 'Alto'
+// en versiones anteriores del documento). Prioridad: evitar subestimación.
+const ICAO_MATRIX = {
+  'Catastrófico:Frecuente':                   'Crítico', // [ICAO]
+  'Catastrófico:Probable':                    'Crítico', // [ICAO]
+  'Catastrófico:Remoto':                      'Crítico', // [ICAO + DD aprobado Sprint 2A]
+  'Catastrófico:Improbable':                  'Alto',    // [ICAO]
+  'Catastrófico:Extremadamente Improbable':   'Medio',   // [ICAO]
+  'Crítico:Frecuente':                        'Crítico', // [ICAO]
+  'Crítico:Probable':                         'Alto',    // [ICAO]
+  'Crítico:Remoto':                           'Alto',    // [ICAO]
+  'Crítico:Improbable':                       'Medio',   // [ICAO]
+  'Crítico:Extremadamente Improbable':        'Bajo',    // [ICAO]
+  'Marginal:Frecuente':                       'Alto',    // [ICAO]
+  'Marginal:Probable':                        'Alto',    // [ICAO]
+  'Marginal:Remoto':                          'Medio',   // [ICAO]
+  'Marginal:Improbable':                      'Bajo',    // [ICAO]
+  'Marginal:Extremadamente Improbable':       'Bajo',    // [ICAO]
+  'Insignificante:Frecuente':                 'Medio',   // [ICAO]
+  'Insignificante:Probable':                  'Bajo',    // [ICAO]
+  'Insignificante:Remoto':                    'Bajo',    // [ICAO]
+  'Insignificante:Improbable':                'Bajo',    // [ICAO]
+  'Insignificante:Extremadamente Improbable': 'Bajo',    // [ICAO]
+};
+
+// ── Helpers de comparación de escala ──────────────────────────────────────────
+// Orden de severidad: índice menor = mayor gravedad
+const _SEV_ORDER  = ['Catastrófico', 'Crítico', 'Marginal', 'Insignificante'];
+// Orden de probabilidad: índice menor = mayor frecuencia
+const _PROB_ORDER = ['Frecuente', 'Probable', 'Remoto', 'Improbable', 'Extremadamente Improbable'];
+
+/** Retorna la severidad más grave de las dos. */
+function _sevMax(a, b) {
+  const ia = _SEV_ORDER.indexOf(a);
+  const ib = _SEV_ORDER.indexOf(b);
+  if (ia === -1) return b;
+  if (ib === -1) return a;
+  return ia <= ib ? a : b;
+}
+
+/** Retorna la probabilidad más frecuente de las dos. */
+function _probMax(a, b) {
+  const ia = _PROB_ORDER.indexOf(a);
+  const ib = _PROB_ORDER.indexOf(b);
+  if (ia === -1) return b;
+  if (ib === -1) return a;
+  return ia <= ib ? a : b;
+}
+
+/**
+ * _deriveRisk — Risk Adapter para la salida validada de Gemini.
+ *
+ * Pure function. No modifica occ. No llama APIs. Sin side effects.
+ * En Shadow Mode: resultado va únicamente a logs.
+ * Post-Phase 4 (requiere autorización separada): enriquecerá occ.
+ *
+ * @param {string}   categoria        geminiResult.categoria  (29-cat ICAO)
+ * @param {string[]} flagsSeguridad   geminiResult.flags_seguridad
+ * @param {number}   confianza        geminiResult.confianza  (0–1)
+ * @param {boolean}  requiereRevision geminiResult.requiere_revision
+ * @returns {{ severidad, probabilidad, nivel_riesgo, _revisarManualmente, _riskSource }}
+ */
+function _deriveRisk(categoria, flagsSeguridad, confianza, requiereRevision) {
+  const flags = Array.isArray(flagsSeguridad) ? flagsSeguridad : [];
+
+  // ── Categoría desconocida — safe default ────────────────────────────────
+  const base = RISK_TABLE[categoria];
+  if (!base) {
+    return {
+      severidad:           null,
+      probabilidad:        null,
+      nivel_riesgo:        null,
+      _revisarManualmente: true,
+      _riskSource:         'UNKNOWN_CATEGORY:MANUAL_REVIEW',
+    };
+  }
+
+  // ── Paso 1: Severidad ────────────────────────────────────────────────────
+  // Base de categoría elevada por flags. Solo puede subir, nunca bajar.
+  // La confianza NO participa aquí.
+  let severidadFinal = base.severidadBase;
+  let flagElevated   = false;
+
+  for (const flag of flags) {
+    const sevMinima = FLAG_ELEVATION[flag];
+    if (sevMinima) {
+      const elevated = _sevMax(severidadFinal, sevMinima);
+      if (elevated !== severidadFinal) flagElevated = true;
+      severidadFinal = elevated;
+    }
+  }
+
+  // ── Paso 2: Probabilidad ─────────────────────────────────────────────────
+  // Default de la categoría, elevado por combos flag+categoría aprobados.
+  // FIRE + Incendio/Smoke → Probable. FUEL_EMERGENCY + Fuel → Probable.
+  // [DD] Provisional — pendiente validación con datos históricos.
+  let probabilidadFinal = base.probabilidadDefault;
+
+  if (flags.includes('FIRE') &&
+      (categoria === 'Incendio' || categoria === 'Smoke / Humo a Bordo')) {
+    probabilidadFinal = _probMax(probabilidadFinal, 'Probable');
+  }
+  if (flags.includes('FUEL_EMERGENCY') && categoria === 'Fuel / Combustible') {
+    probabilidadFinal = _probMax(probabilidadFinal, 'Probable');
+  }
+
+  // ── Paso 3: nivel_riesgo — matriz ICAO ──────────────────────────────────
+  const nivelRiesgo = ICAO_MATRIX[severidadFinal + ':' + probabilidadFinal] || null;
+
+  // ── Paso 4: _revisarManualmente ─────────────────────────────────────────
+  // Solo puede activarse (OR). Nunca puede limpiarse.
+  // confianza < 0.65 activa revisión pero NO modifica riesgo.
+  // [SUP] Umbral 0.65 provisional — calibrar con datos de Railway.
+  const hasFlagRevision = flags.some(f => FLAG_REVISION.has(f));
+  const confianzaBaja   = typeof confianza === 'number' && confianza < 0.65;
+  const esCatastrofico  = severidadFinal === 'Catastrófico';
+
+  const revisarManualmente = Boolean(requiereRevision)
+                          || hasFlagRevision
+                          || confianzaBaja
+                          || esCatastrofico
+                          || flagElevated;
+
+  return {
+    severidad:           severidadFinal,
+    probabilidad:        probabilidadFinal,
+    nivel_riesgo:        nivelRiesgo,
+    _revisarManualmente: revisarManualmente,
+    _riskSource:         'gemini:adapter',
+  };
 }
 
 // ── POST /api/v1/ingest ───────────────────────────────────────────────────────
