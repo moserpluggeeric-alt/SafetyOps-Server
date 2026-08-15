@@ -21,6 +21,16 @@ const fs     = require('fs');
 const path   = require('path');
 const { WebSocketServer } = require('ws');
 
+// ── Gemini Shadow client (Sprint 1) ─────────────────────────────────────────
+// NO modificar gemini-client.js — se consume su API pública solamente.
+const {
+  isGeminiEnabled,
+  isShadowMode,
+  getModel,
+  buildStructuredContext,
+  geminiClassify,
+} = require('./gemini-client');
+
 // ── SQLite Persistence — Railway Volume ───────────────────────────────────────
 // Railway volumes mount at /data. If the directory doesn't exist the server
 // refuses to start — never silently fall back to ephemeral local storage.
@@ -275,11 +285,87 @@ function _applyServerClassification(texto, occ, lang) {
       occ._m7_conf           = classifyResult.confianza;
       occ._clasificadoPor    = 'server:m7:' + m7.rule;
     }
-    return { applied: true, rule: m7.rule, revisarManualmente: m6Rev || !m7.autoAccept };
+    return { applied: true, rule: m7.rule, revisarManualmente: m6Rev || !m7.autoAccept, classifyResult };
   } catch (err) {
     console.warn('[classify] non-blocking error:', err.message);
     return { applied: false, rule: 'EXCEPTION' };
   }
+}
+
+// ── Gemini Shadow Observer (Sprint 1) ────────────────────────────────────────
+// Firma: _runGeminiShadow(texto, classifyResult, finalResult)
+//
+//   classifyResult — output RAW de clasificarV2(). Alimenta buildStructuredContext().
+//                    Contiene _trazas, _scoreDetalle, _lexiconV2, etc.
+//                    NUNCA se usa para la comparación.
+//
+//   finalResult    — snapshot inmutable de occ DESPUÉS de que SafetyOps aplicó
+//                    MEJORA 6 + MEJORA 7. Contiene la decisión real del sistema:
+//                    categoria (null si Revisión requerida), estado, _m7_sugerencia,
+//                    _m7_rule, _m7_conf. NUNCA se modifica aquí.
+//
+// Reglas absolutas:
+//   - Nunca modifica occ ni ningún campo del reporte.
+//   - Nunca bloquea la respuesta HTTP (fire-and-forget).
+//   - Nunca lanza excepciones al caller.
+//   - Nunca persiste nada.
+//   - Inactivo hoy: isGeminiEnabled() = false porque GEMINI_ENABLED no está en Railway.
+function _runGeminiShadow(texto, classifyResult, finalResult) {
+  if (!isGeminiEnabled()) return;
+  if (!isShadowMode())    return;
+
+  // classifyResult alimenta el contexto estructurado (RAW V2)
+  const ctx = buildStructuredContext(classifyResult, texto);
+
+  Promise.resolve()
+    .then(() => geminiClassify(ctx))
+    .then(geminiResult => {
+      if (!geminiResult) return;
+
+      const model = getModel();
+
+      // Decisión final real de SafetyOps (post-MEJORA 6 / MEJORA 7)
+      const categFinal  = finalResult ? (finalResult.categoria      || null) : null;
+      const estadoFinal = finalResult ? (finalResult.estado         || '—')  : '—';
+      const catSugerida = finalResult ? (finalResult._m7_sugerencia || null) : null;
+      const m7Rule      = finalResult ? (finalResult._m7_rule       || '—')  : '—';
+      const m7Conf      = finalResult ? (finalResult._m7_conf != null
+                            ? (finalResult._m7_conf * 100).toFixed(1) + '%'
+                            : '—') : '—';
+
+      const categGemini = geminiResult.categoria || null;
+
+      // match_categoria compara contra la categoría que SafetyOps REALMENTE
+      // aceptó. Si quedó en Revisión requerida (categFinal=null), nunca hay match.
+      const matchCat = categFinal !== null && categFinal === categGemini;
+
+      console.log(
+        '[gemini-shadow]'                                                               +
+        '\n  modelo='                    + model                                        +
+        '\n  categoria_final_safetyops=' + (categFinal  || 'null — Revisión requerida') +
+        '\n  categoria_sugerida='        + (catSugerida || '—')                        +
+        '\n  estado_final='              + estadoFinal                                  +
+        '\n  m7_rule='                   + m7Rule                                       +
+        '\n  m7_conf='                   + m7Conf                                       +
+        '\n  categoria_gemini='          + (categGemini || '—')                        +
+        '\n  match_categoria='           + matchCat
+      );
+
+      const diffs = [];
+      if (!matchCat) {
+        diffs.push(
+          '  categoria: safetyops_final="' + (categFinal || 'null') +
+          '" sugerida="'  + (catSugerida || '—') +
+          '" gemini="'    + (categGemini || '—') + '"'
+        );
+      }
+      if (diffs.length > 0) {
+        console.warn('[gemini-shadow][DIFF]\n' + diffs.join('\n'));
+      }
+    })
+    .catch(err => {
+      console.warn('[gemini-shadow][ERROR]', err.message);
+    });
 }
 
 // ── POST /api/v1/ingest ───────────────────────────────────────────────────────
@@ -396,6 +482,13 @@ async function handleIngestReport(req, res, origin) {
     }
   }
   if (!occ._clasificadoPor) occ._clasificadoPor = 'browser';
+  _runGeminiShadow(texto, _ingestClassResult.classifyResult, {
+    categoria:      occ.categoria,
+    estado:         occ.estado,
+    _m7_sugerencia: occ._m7_sugerencia,
+    _m7_rule:       occ._m7_rule,
+    _m7_conf:       occ._m7_conf,
+  });
 
   // 11. Persist — same path as all other report flows
   _storedReports.unshift(occ);
@@ -1134,6 +1227,14 @@ async function handleSyncReport(req, res, origin) {
         ' browser_cat=' + (occ._categoria_browser || '—'));
     }
   }
+
+  _runGeminiShadow(occ.texto, _syncClassResult.classifyResult, {
+    categoria:      occ.categoria,
+    estado:         occ.estado,
+    _m7_sugerencia: occ._m7_sugerencia,
+    _m7_rule:       occ._m7_rule,
+    _m7_conf:       occ._m7_conf,
+  });
 
   // ── Optional Groq enrichment ───────────────────────────────────────────────
   // When the local engine classified, Groq enriches only risk metadata
