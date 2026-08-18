@@ -885,7 +885,8 @@ function _checkIngestRate(ip) {
 }
 
 // Allowed origin for /api/v1/ingest (defense in depth — not a substitute for token auth)
-const _INGEST_ALLOWED_ORIGIN = 'https://safettyops.netlify.app';
+// Configurable via INGEST_ALLOWED_ORIGIN env var; defaults to the production Netlify frontend.
+const _INGEST_ALLOWED_ORIGIN = process.env.INGEST_ALLOWED_ORIGIN || 'https://safetyops-personal.netlify.app';
 
 // Whitelist of fields accepted from the frontend — all others are silently stripped
 const _INGEST_WHITELIST = new Set([
@@ -1311,7 +1312,11 @@ function getAllowedOrigin(requestOrigin) {
   if (!CORS_ORIGINS) return '*';                        // dev mode — allow all
   if (!requestOrigin) return CORS_ORIGINS[0] || '*';   // no Origin header
   const match = CORS_ORIGINS.find(o => o === requestOrigin);
-  return match || '';                                   // empty → blocked
+  if (match) return match;
+  // Also accept the ingest-specific origin so OPTIONS preflights to /api/v1/ingest succeed
+  // even when CORS_ORIGIN env var doesn't explicitly list it.
+  if (requestOrigin === _INGEST_ALLOWED_ORIGIN) return _INGEST_ALLOWED_ORIGIN;
+  return '';                                            // empty → blocked
 }
 
 function corsHeaders(requestOrigin) {
