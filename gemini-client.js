@@ -206,8 +206,8 @@ async function geminiClassify(structuredContext) {
             ' — bytes_received=' + _bytesReceived +
             ' headers_received=' + _headersReceived);
           controller.abort();
-          reject(new Error('Gemini timeout (15s)'));
-        }, 15000);
+          reject(new Error('Gemini timeout (28s)'));
+        }, 28000);
 
         const req = https.request({
           hostname: 'generativelanguage.googleapis.com',
@@ -244,7 +244,7 @@ async function geminiClassify(structuredContext) {
           if (err.name === 'AbortError') {
             console.warn('[gemini-diag] ABORT at T+' + (Date.now() - _tPromise) + 'ms' +
               ' — bytes_received=' + _bytesReceived);
-            reject(new Error('Gemini timeout (15s)'));
+            reject(new Error('Gemini timeout (28s)'));
           } else {
             reject(err);
           }
