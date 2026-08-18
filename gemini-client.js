@@ -60,9 +60,9 @@ function isShadowMode() {
   return process.env.GEMINI_SHADOW_MODE !== 'false'; // default: true
 }
 
-/** Returns the configured model, falling back to gemini-3.5-flash. */
+/** Returns the configured model, falling back to gemini-2.0-flash. */
 function getModel() {
-  return process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+  return process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 }
 
 // ── System prompt ─────────────────────────────────────────────────────────────

@@ -1039,183 +1039,7 @@ try {
   console.warn('[engine] analysis-engine load failed:', err.message, '— WS-only mode');
 }
 
-// ── Groq LLM Integration ──────────────────────────────────────────────────────
-// Set GROQ_API_KEY env var to enable LLM-based classification.
-// Falls back to local Naive Bayes engine when not set.
-const GROQ_API_KEY   = process.env.GROQ_API_KEY || null;
-const GROQ_MODEL     = process.env.GROQ_MODEL   || 'llama-3.1-8b-instant';
-// GROQ_MODEL_STABLE: rollback target. If new model fails gates, set GROQ_MODEL=this in Railway.
-const GROQ_MODEL_STABLE = 'llama-3.1-8b-instant';
-const GROQ_API_URL   = 'https://api.groq.com/openai/v1/chat/completions';
-// GROQ_USE_STRUCTURED_OUTPUTS: set to 'true' in Railway only after Gate 2 (Schema) passes.
-// When enabled, enforces strict JSON Schema via response_format — eliminates regex extraction.
-const GROQ_USE_STRUCTURED_OUTPUTS = process.env.GROQ_USE_STRUCTURED_OUTPUTS === 'true';
-
-const GROQ_CATEGORIES = ['Factor Humano','Técnico','Meteorología','Seguridad Aeroportuaria','ATC / Espacio Aéreo','Otro'];
-
-// JSON Schema for structured output mode — used when GROQ_USE_STRUCTURED_OUTPUTS=true.
-// Compatible with openai/gpt-oss-20b and any OpenAI-compatible model with structured outputs.
-const GROQ_OUTPUT_SCHEMA = {
-  type: 'json_schema',
-  json_schema: {
-    name:   'safety_classification',
-    strict: true,
-    schema: {
-      type: 'object',
-      properties: {
-        categoria:    { type: 'string', enum: GROQ_CATEGORIES },
-        severidad:    { type: 'string', enum: ['Catastrófico','Crítico','Marginal','Insignificante'] },
-        probabilidad: { type: 'string', enum: ['Frecuente','Probable','Remoto','Improbable','Extremadamente Improbable'] },
-        nivel_riesgo: { type: 'string', enum: ['Crítico','Alto','Medio','Bajo'] },
-        resumen:      { type: 'string' },
-      },
-      required: ['categoria','severidad','probabilidad','nivel_riesgo','resumen'],
-      additionalProperties: false,
-    },
-  },
-};
-
-async function groqClassify(texto, area) {
-  if (!GROQ_API_KEY) return null;
-  const prompt = `Sos un experto en Gestión de Seguridad Operacional (SMS) aeronáutico, entrenado en las normas ICAO Anexo 19, EVAIR (EUROCONTROL Voluntary ATM Incident Reporting) y la taxonomía de ocurrencias de la ANAC Argentina.
-
-Tu tarea es clasificar el siguiente reporte de seguridad operacional según estas categorías SMS:
-
-CATEGORÍAS (elegí EXACTAMENTE una):
-- "Factor Humano": errores de tripulación, fatiga, comunicación, procedimientos no seguidos, CRM deficiente
-- "Técnico": fallas de aeronave, sistemas, motores, aviónica, estructura, equipamiento de rampa
-- "Meteorología": condiciones meteorológicas adversas, windshear, turbulencia, hielo, visibilidad reducida
-- "Seguridad Aeroportuaria": incursiones en pista, FOD, accesos no autorizados, incidentes en rampa/plataforma
-- "ATC / Espacio Aéreo": separación reducida, instrucciones de ATC, gestión del espacio aéreo, conflictos de tráfico
-- "Otro": no encaja en ninguna categoría anterior
-
-GUÍA DE CLASIFICACIÓN (basada en EVAIR):
-- Fuego, incendio, llamas, humo a bordo, smoke on board → SIEMPRE "Técnico". Sin excepción.
-- Incursión en pista → "Seguridad Aeroportuaria"
-- TCAS RA, conflicto de tráfico → "ATC / Espacio Aéreo"
-- Bird strike, colisión aviar → "Técnico"
-- Aproximación inestable continuada por decisión de tripulación → "Factor Humano"
-- Mal tiempo que afecta operación → "Meteorología"
-- Falla hidráulica / eléctrica / motores / aviónica → "Técnico"
-- Descompresión, pérdida de presurización → "Técnico"
-
-EJEMPLOS (lenguaje técnico y ciudadano/coloquial latinoamericano):
-- "fuego en el avion" → "Técnico"
-- "humo en cabina" → "Técnico"
-- "incendio a bordo" → "Técnico"
-- "había humo saliendo del motor" → "Técnico"
-- "se prendió fuego el motor" → "Técnico"
-- "bird strike en ascenso" → "Técnico"
-- "un pájaro entró al motor" → "Técnico"
-- "piloto no siguió procedimiento" → "Factor Humano"
-- "el copiloto estaba cansado y se olvidó el checklist" → "Factor Humano"
-- "windshear en aproximación" → "Meteorología"
-- "había mucha niebla y no se veía nada" → "Meteorología"
-- "persona en la pista" → "Seguridad Aeroportuaria"
-- "había algo tirado en la pista" → "Seguridad Aeroportuaria"
-- "casi chocamos con otro avión" → "ATC / Espacio Aéreo"
-
-ESCALAS DE RIESGO (ICAO/ANAC):
-- severidad: "Catastrófico" | "Crítico" | "Marginal" | "Insignificante"
-- probabilidad: "Frecuente" | "Probable" | "Remoto" | "Improbable" | "Extremadamente Improbable"
-- nivel_riesgo: "Crítico" | "Alto" | "Medio" | "Bajo"
-
-Reporte recibido (área operacional: ${area || 'Operaciones de Vuelo'}):
-"${texto}"
-
-Respondé ÚNICAMENTE con un objeto JSON válido con estos campos: categoria, severidad, probabilidad, nivel_riesgo, resumen (una oración en español explicando la clasificación).
-Sin texto adicional, sin markdown, solo el JSON.`;
-
-  // Up to 2 attempts: retry once on JSON extraction failure (not on timeout/network).
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      const _t0 = Date.now();
-      const https = require('https');
-      const requestBody = {
-        model:       GROQ_MODEL,
-        messages:    [{ role: 'user', content: prompt }],
-        max_tokens:  400,        // bumped from 300; GPT-OSS 20B may generate longer resumen
-        temperature: 0.1,
-      };
-      if (GROQ_USE_STRUCTURED_OUTPUTS) {
-        requestBody.response_format = GROQ_OUTPUT_SCHEMA;
-      }
-      const body = JSON.stringify(requestBody);
-
-      const result = await new Promise((resolve, reject) => {
-        const url = new URL(GROQ_API_URL);
-        const req = https.request({
-          hostname: url.hostname,
-          path:     url.pathname,
-          method:   'POST',
-          headers: {
-            'Authorization':  'Bearer ' + GROQ_API_KEY,
-            'Content-Type':   'application/json',
-            'Content-Length': Buffer.byteLength(body),
-          },
-        }, (res) => {
-          let data = '';
-          res.on('data', chunk => data += chunk);
-          res.on('end', () => {
-            try { resolve(JSON.parse(data)); }
-            catch (e) { reject(new Error('Groq parse error: ' + data.slice(0, 200))); }
-          });
-        });
-        req.on('error', reject);
-        req.setTimeout(15000, () => { req.destroy(); reject(new Error('Groq timeout')); });
-        req.write(body);
-        req.end();
-      });
-
-      const latencyMs = Date.now() - _t0;
-
-      // Check for API-level errors (e.g. model not found, rate limit)
-      if (result?.error) {
-        throw new Error('Groq API error: ' + (result.error.message || JSON.stringify(result.error)));
-      }
-
-      const content = result?.choices?.[0]?.message?.content || '';
-
-      // Extract JSON — structured outputs: content IS the JSON; freeform: regex extraction.
-      let parsed;
-      if (GROQ_USE_STRUCTURED_OUTPUTS) {
-        parsed = JSON.parse(content);
-      } else {
-        const match = content.match(/\{[\s\S]*\}/);
-        if (!match) throw new Error('No JSON in Groq response: ' + content.slice(0, 120));
-        parsed = JSON.parse(match[0]);
-      }
-
-      // Observability fields — internal only, stripped from public API responses.
-      parsed._groq_model      = GROQ_MODEL;
-      parsed._groq_latency_ms = latencyMs;
-      parsed._groq_structured = GROQ_USE_STRUCTURED_OUTPUTS;
-      parsed._groq_attempt    = attempt;
-
-      console.log('[groq] model=' + GROQ_MODEL +
-        ' structured=' + GROQ_USE_STRUCTURED_OUTPUTS +
-        ' attempt=' + attempt +
-        ' latency=' + latencyMs + 'ms' +
-        ' categoria=' + parsed.categoria +
-        ' nivel=' + parsed.nivel_riesgo);
-
-      return parsed;
-
-    } catch (err) {
-      // Only retry on JSON extraction errors — not on timeout or network failures.
-      const isRetryable = !err.message.includes('timeout') &&
-                          !err.message.includes('Groq API error') &&
-                          (err.message.includes('No JSON') || err.message.includes('JSON'));
-      if (attempt === 1 && isRetryable) {
-        console.warn('[groq] attempt=1 retryable JSON error — retrying once: ' + err.message);
-        continue;
-      }
-      console.warn('[groq] Error (attempt=' + attempt + ') — falling back to local engine:', err.message);
-      return null;
-    }
-  }
-  return null;
-}
+// ── Gemini is the LLM engine (see gemini-client.js) ──────────────────────────
 
 // ── Diagnostic Mode ───────────────────────────────────────────────────────────
 // Unified trace logger — add observability without touching any logic.
@@ -1370,17 +1194,15 @@ function handleHealth(res, origin) {
     version:   API_VERSION,
     engine:    isEngineConnected() ? 'connected' : 'disconnected',
     guidance:  findGuidance ? 'loaded' : ('error: ' + _guidanceLoadError),
-    groq:             GROQ_API_KEY ? 'active' : 'not_configured',
-    groq_model:       GROQ_API_KEY ? GROQ_MODEL : null,
-    groq_model_stable: GROQ_MODEL_STABLE,
-    groq_structured:  GROQ_USE_STRUCTURED_OUTPUTS,
+    gemini:           isGeminiEnabled() ? 'active' : 'not_configured',
+    gemini_model:     isGeminiEnabled() ? getModel() : null,
     uptime:           uptime(),
     timestamp:        new Date().toISOString(),
   }, origin);
 }
 
 // ── Sprint A: POST /api/v1/classify ──────────────────────────────────────────
-// Classifies a text using Groq (server-side API key).
+// Classifies a text using Gemini (server-side API key).
 // No auth required — public endpoint for any SafetyOps client.
 // No side effects: no DB writes, no WS events, no report creation.
 async function handleClassify(req, res, origin) {
@@ -1399,40 +1221,57 @@ async function handleClassify(req, res, origin) {
     return sendJSON(res, 400, { success: false, error: 'text_required' }, origin);
   }
 
-  if (!GROQ_API_KEY) {
-    return sendJSON(res, 503, { success: false, error: 'engine_unavailable', detail: 'GROQ_API_KEY not configured' }, origin);
+  if (!isGeminiEnabled()) {
+    return sendJSON(res, 503, { success: false, error: 'engine_unavailable', detail: 'GEMINI_API_KEY not configured or GEMINI_ENABLED not true' }, origin);
   }
 
   try {
     const t0 = Date.now();
-    const groqResult = await groqClassify(text, null);
+
+    // Run local engine first to build structured context for Gemini
+    let localResult = null;
+    try {
+      const { clasificarV2 } = require('./analysis-engine/classifier-v2');
+      localResult = clasificarV2(text, lang);
+    } catch (e) {
+      console.warn('[classify] local engine unavailable, proceeding with minimal context:', e.message);
+    }
+
+    const ctx = buildStructuredContext(localResult, text);
+    const geminiResult = await geminiClassify(ctx);
     const ms = Date.now() - t0;
 
-    if (!groqResult) {
+    if (!geminiResult) {
+      // Fallback: return local engine result if available
+      if (localResult && localResult.categoria) {
+        console.warn('[classify] Gemini unavailable — using local fallback');
+        return sendJSON(res, 200, {
+          success: true,
+          classification: {
+            category:   localResult.categoria,
+            risk:       localResult.nivel_riesgo || null,
+            confidence: localResult.confianza    || null,
+          },
+          engine: { provider: 'Local', model: 'classifier-v2', ms },
+          version: '1.0',
+        }, origin);
+      }
       return sendJSON(res, 503, { success: false, error: 'engine_unavailable' }, origin);
     }
 
-    // Map Groq categories → full ICAO/SMS taxonomy names
-    const CAT_MAP = {
-      'Factor Humano':          'Factores Humanos',
-      'Técnico':                'Falla Técnica',
-      'Meteorología':           'Meteorología Adversa',
-      'Seguridad Aeroportuaria':'Seguridad Aeroportuaria',
-      'ATC / Espacio Aéreo':    'Incidencia ATC',
-      'Otro':                   'Otro',
-    };
-    const category = CAT_MAP[groqResult.categoria] || groqResult.categoria;
+    // Gemini returns 29-category ICAO taxonomy directly — no mapping needed
+    const category = geminiResult.categoria;
 
     sendJSON(res, 200, {
       success: true,
       classification: {
         category,
-        risk:       groqResult.nivel_riesgo || null,
-        confidence: groqResult.confianza    || null,
+        risk:       geminiResult.nivel_riesgo || null,
+        confidence: geminiResult.confianza    || null,
       },
       engine: {
-        provider: 'Groq',
-        model:    GROQ_MODEL,
+        provider: 'Gemini',
+        model:    getModel(),
         ms,
       },
       version: '1.0',
@@ -1440,7 +1279,7 @@ async function handleClassify(req, res, origin) {
 
     console.log(`[classify] "${text.slice(0, 60)}" → ${category} (${ms}ms)`);
   } catch (err) {
-    console.error('[classify] Groq error:', err.message);
+    console.error('[classify] Gemini error:', err.message);
     sendJSON(res, 503, { success: false, error: 'engine_unavailable' }, origin);
   }
 }
@@ -1494,22 +1333,34 @@ async function handleSyncReport(req, res, origin) {
     _m7_conf:       occ._m7_conf,
   });
 
-  // ── Optional Groq enrichment ───────────────────────────────────────────────
-  // When the local engine classified, Groq enriches only risk metadata
+  // ── Optional Gemini enrichment ────────────────────────────────────────────
+  // When the local engine classified, Gemini enriches risk metadata
   // (severidad / probabilidad / nivel_riesgo) without overriding categoria.
-  if (GROQ_API_KEY) {
-    const groqResult = await groqClassify(occ.texto, occ.area);
-    if (groqResult) {
-      if (!_syncClassResult.applied) {
-        // No local engine — use Groq as the classifier fallback
-        occ.categoria       = groqResult.categoria    || occ.categoria;
-        occ._clasificadoPor = 'groq:' + GROQ_MODEL;
+  if (isGeminiEnabled()) {
+    try {
+      let localResult = _syncClassResult.classifyResult || null;
+      if (!localResult) {
+        try {
+          const { clasificarV2 } = require('./analysis-engine/classifier-v2');
+          localResult = clasificarV2(occ.texto, occ.lang || 'es');
+        } catch (e) { /* local engine unavailable */ }
       }
-      // Always allow Groq to enrich risk metadata
-      occ.severidad    = groqResult.severidad    || occ.severidad;
-      occ.probabilidad = groqResult.probabilidad || occ.probabilidad;
-      occ.nivel_riesgo = groqResult.nivel_riesgo || occ.nivel_riesgo;
-      occ._groq_resumen = groqResult.resumen     || undefined;
+      const ctx = buildStructuredContext(localResult, occ.texto);
+      const geminiResult = await geminiClassify(ctx);
+      if (geminiResult) {
+        if (!_syncClassResult.applied) {
+          // No local engine — use Gemini as the classifier fallback
+          occ.categoria       = geminiResult.categoria    || occ.categoria;
+          occ._clasificadoPor = 'gemini:' + getModel();
+        }
+        // Always allow Gemini to enrich risk metadata
+        occ.severidad    = geminiResult.severidad    || occ.severidad;
+        occ.probabilidad = geminiResult.probabilidad || occ.probabilidad;
+        occ.nivel_riesgo = geminiResult.nivel_riesgo || occ.nivel_riesgo;
+        occ._gemini_resumen = geminiResult.resumen   || undefined;
+      }
+    } catch (e) {
+      console.warn('[sync] Gemini enrichment error (non-blocking):', e.message);
     }
   }
 
@@ -1581,10 +1432,8 @@ function handleStats(req, res, origin) {
       ok:          true,
       timestamp:   new Date().toISOString(),
       uptime_secs: Math.floor((Date.now() - SERVER_START) / 1000),
-      groq_active:       !!GROQ_API_KEY,
-      groq_model:        GROQ_API_KEY ? GROQ_MODEL : null,
-      groq_model_stable: GROQ_MODEL_STABLE,
-      groq_structured:   GROQ_USE_STRUCTURED_OUTPUTS,
+      gemini_active:  isGeminiEnabled(),
+      gemini_model:   isGeminiEnabled() ? getModel() : null,
       engine_connected: isEngineConnected(),
       reportes: {
         total:              row.total             || 0,
