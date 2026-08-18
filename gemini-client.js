@@ -182,7 +182,6 @@ async function geminiClassify(structuredContext) {
       responseSchema:   GEMINI_RESPONSE_SCHEMA,
       temperature:      0.1,
       maxOutputTokens:  400,
-      thinkingConfig:   { thinkingBudget: 0 },
     },
   };
 
