@@ -181,7 +181,7 @@ async function geminiClassify(structuredContext) {
       responseMimeType: 'application/json',
       responseSchema:   GEMINI_RESPONSE_SCHEMA,
       temperature:      0.1,
-      maxOutputTokens:  400,
+      maxOutputTokens:  1200,
     },
   };
 
