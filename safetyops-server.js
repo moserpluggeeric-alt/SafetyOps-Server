@@ -621,6 +621,22 @@ function _deriveRisk(categoria, flagsSeguridad, confianza, requiereRevision) {
   };
 }
 
+// ── Arbitration Engine — constants ────────────────────────────────────────────
+// FLAG_ELEVATION must be declared before this block — verified: defined above.
+// Derived from FLAG_ELEVATION — the existing Safety Rules source of truth for flag criticality.
+// FUEL_EMERGENCY intentionally excluded: Gemini lacks OFP/FOB/contingency context.
+// Fuel criticality remains under deterministic Safety Rules.
+const GEMINI_CRITICAL_FLAGS = new Set(
+  Object.keys(FLAG_ELEVATION).filter(f => f !== 'FUEL_EMERGENCY')
+);
+
+const LOCAL_CONFIDENCE_THRESHOLD = 0.55;
+// Operational initial threshold — subject to calibration with production/audit dataset.
+const GEMINI_RESCUE_THRESHOLD = 0.75;
+
+// Gemini in /ingest is disabled pending concurrency/throughput analysis.
+const GEMINI_INGEST_ENABLED = false;
+
 // ── POST /api/v1/ingest ───────────────────────────────────────────────────────
 // Write-only endpoint for frontend report submission (web + mobile).
 // Auth: per-company demo token (X-Ingest-Token header) verified against demo_tokens
@@ -742,6 +758,90 @@ async function handleIngestReport(req, res, origin) {
     _m7_rule:       occ._m7_rule,
     _m7_conf:       occ._m7_conf,
   });
+
+  // ── Arbitration Engine — /ingest (disabled: GEMINI_INGEST_ENABLED = false) ──
+  // Enabled path is intentionally identical to /sync. Activate only after
+  // concurrency/throughput analysis confirms Gemini latency is acceptable
+  // under ingest load. GEMINI_INGEST_ENABLED guards the entire block.
+  if (isGeminiEnabled() && GEMINI_INGEST_ENABLED) {
+    try {
+      const localCat     = occ.categoria; // captured before state machine may overwrite
+      const localResult  = _ingestClassResult.classifyResult || null;
+      const ctx          = buildStructuredContext(localResult, texto);
+      const geminiResult = await geminiClassify(ctx);
+
+      const localConf  = (localResult != null && typeof localResult.confianza === 'number') ? localResult.confianza : 0;
+      const localHigh  = _ingestClassResult.applied && localConf >= LOCAL_CONFIDENCE_THRESHOLD;
+      const localLow   = _ingestClassResult.applied && localConf <  LOCAL_CONFIDENCE_THRESHOLD;
+      const localError = !_ingestClassResult.applied;
+
+      const geminiConf   = (geminiResult != null && typeof geminiResult.confianza === 'number') ? geminiResult.confianza : 0;
+      const geminiCat    = geminiResult != null ? (geminiResult.categoria    || null)  : null;
+      const geminiReview = geminiResult != null ? (geminiResult.requiere_revision ?? false) : false;
+      const geminiFlags  = geminiResult != null ? (geminiResult.flags_seguridad || []) : [];
+      const geminiHigh   = geminiResult !== null && geminiConf >= GEMINI_RESCUE_THRESHOLD;
+      const geminiError  = geminiResult === null;
+
+      // Union of local + Gemini flags (no duplicates)
+      if (geminiFlags.length > 0) {
+        occ.flags_seguridad = [...new Set([...(occ.flags_seguridad || []), ...geminiFlags])];
+      }
+      const hasCriticalFlag = (occ.flags_seguridad || []).some(f => GEMINI_CRITICAL_FLAGS.has(f));
+
+      // 8-state Arbitration Machine (same logic as /sync)
+      if (localHigh && !geminiError) {
+        if (geminiHigh && geminiCat === occ.categoria) {
+          occ._clasificadoPor    = 'ensemble:consensus';
+          occ._gemini_categoria  = geminiCat;
+          if (geminiReview) occ.estado = 'Revisión requerida';
+        } else if (geminiHigh && geminiCat !== occ.categoria) {
+          occ._gemini_categoria  = geminiCat;
+          occ.categoria          = null;
+          occ.estado             = 'Revisión requerida';
+          occ._clasificadoPor    = 'ensemble:conflict';
+        } else {
+          occ._gemini_categoria  = geminiCat;
+          occ._clasificadoPor    = 'local:dominant';
+        }
+      } else if (localLow && !geminiError) {
+        if (geminiHigh) {
+          occ.categoria          = geminiCat;
+          occ.estado             = 'Revisión requerida';
+          occ._gemini_categoria  = geminiCat;
+          occ._clasificadoPor    = 'gemini:rescue';
+        } else {
+          occ.categoria          = null;
+          occ.estado             = 'Revisión requerida';
+          occ._gemini_categoria  = geminiCat;
+          occ._clasificadoPor    = 'ensemble:ambiguous';
+        }
+      } else if (localError && geminiHigh) {
+        occ.categoria            = geminiCat;
+        occ.estado               = 'Revisión requerida';
+        occ._gemini_categoria    = geminiCat;
+        occ._clasificadoPor      = 'gemini:fallback';
+      } else if (localHigh && geminiError) {
+        occ._clasificadoPor      = 'local:fallback';
+      } else {
+        occ.categoria            = null;
+        occ.estado               = 'Revisión requerida';
+        occ._clasificadoPor      = 'system:failure';
+      }
+
+      // Safety Rules override: critical flags always force review regardless of state
+      if (hasCriticalFlag) occ.estado = 'Revisión requerida';
+
+      occ._arbitraje_audit = {
+        localCat,
+        localConf, localHigh, localLow, localError,
+        geminiConf, geminiCat, geminiHigh, geminiError, geminiReview,
+        hasCriticalFlag,
+        clasificadoPor: occ._clasificadoPor,
+      };
+    } catch (e) {
+      console.warn('[ingest] Arbitration Engine error (non-blocking):', e.message);
+    }
+  }
 
   // 11. Persist — same path as all other report flows
   _storedReports.unshift(occ);
@@ -1333,34 +1433,107 @@ async function handleSyncReport(req, res, origin) {
     _m7_conf:       occ._m7_conf,
   });
 
-  // ── Optional Gemini enrichment ────────────────────────────────────────────
-  // When the local engine classified, Gemini enriches risk metadata
-  // (severidad / probabilidad / nivel_riesgo) without overriding categoria.
-  if (isGeminiEnabled()) {
+  // ── Arbitration Engine — 8-state Local × Gemini classification machine ────
+  // Gemini provides semantic signal only: categoria, confianza, flags, requiere_revision.
+  // Gemini NEVER writes severidad, probabilidad, or nivel_riesgo (ARMS prohibition).
+  // Risk remains under deterministic Safety Rules: _deriveRisk + FLAG_ELEVATION + ICAO_MATRIX.
+  if (isGeminiEnabled() && !isShadowMode()) {
     try {
-      let localResult = _syncClassResult.classifyResult || null;
-      if (!localResult) {
-        try {
-          const { clasificarV2 } = require('./analysis-engine/classifier-v2');
-          localResult = clasificarV2(occ.texto, occ.lang || 'es');
-        } catch (e) { /* local engine unavailable */ }
-      }
-      const ctx = buildStructuredContext(localResult, occ.texto);
+      const localCat     = occ.categoria; // captured before state machine may overwrite
+      const localResult  = _syncClassResult.classifyResult || null;
+      const ctx          = buildStructuredContext(localResult, occ.texto);
       const geminiResult = await geminiClassify(ctx);
-      if (geminiResult) {
-        if (!_syncClassResult.applied) {
-          // No local engine — use Gemini as the classifier fallback
-          occ.categoria       = geminiResult.categoria    || occ.categoria;
-          occ._clasificadoPor = 'gemini:' + getModel();
-        }
-        // Always allow Gemini to enrich risk metadata
-        occ.severidad    = geminiResult.severidad    || occ.severidad;
-        occ.probabilidad = geminiResult.probabilidad || occ.probabilidad;
-        occ.nivel_riesgo = geminiResult.nivel_riesgo || occ.nivel_riesgo;
-        occ._gemini_resumen = geminiResult.resumen   || undefined;
+
+      // ── Local signal ──────────────────────────────────────────────────────
+      const localConf  = (localResult != null && typeof localResult.confianza === 'number') ? localResult.confianza : 0;
+      const localHigh  = _syncClassResult.applied && localConf >= LOCAL_CONFIDENCE_THRESHOLD;
+      const localLow   = _syncClassResult.applied && localConf <  LOCAL_CONFIDENCE_THRESHOLD;
+      const localError = !_syncClassResult.applied;
+
+      // ── Gemini signal ─────────────────────────────────────────────────────
+      const geminiConf   = (geminiResult != null && typeof geminiResult.confianza === 'number') ? geminiResult.confianza : 0;
+      const geminiCat    = geminiResult != null ? (geminiResult.categoria    || null)  : null;
+      const geminiReview = geminiResult != null ? (geminiResult.requiere_revision ?? false) : false;
+      const geminiFlags  = geminiResult != null ? (geminiResult.flags_seguridad || []) : [];
+      const geminiHigh   = geminiResult !== null && geminiConf >= GEMINI_RESCUE_THRESHOLD;
+      const geminiError  = geminiResult === null;
+
+      // ── Flag union (local + Gemini, no duplicates) ────────────────────────
+      // Must occur before Safety Rules flag escalation.
+      if (geminiFlags.length > 0) {
+        occ.flags_seguridad = [...new Set([...(occ.flags_seguridad || []), ...geminiFlags])];
       }
+      const hasCriticalFlag = (occ.flags_seguridad || []).some(f => GEMINI_CRITICAL_FLAGS.has(f));
+
+      // ── 8-state Arbitration Machine ───────────────────────────────────────
+      if (localHigh && !geminiError) {
+        if (geminiHigh && geminiCat === occ.categoria) {
+          // State 1 — ensemble:consensus
+          occ._clasificadoPor   = 'ensemble:consensus';
+          occ._gemini_categoria = geminiCat;
+          if (geminiReview) occ.estado = 'Revisión requerida';
+        } else if (geminiHigh && geminiCat !== occ.categoria) {
+          // State 2 — ensemble:conflict
+          occ._gemini_categoria = geminiCat;
+          occ.categoria         = null;
+          occ.estado            = 'Revisión requerida';
+          occ._clasificadoPor   = 'ensemble:conflict';
+        } else {
+          // State 3 — local:dominant (local high, Gemini low/uncertain)
+          occ._gemini_categoria = geminiCat;
+          occ._clasificadoPor   = 'local:dominant';
+        }
+      } else if (localLow && !geminiError) {
+        if (geminiHigh) {
+          // State 4 — gemini:rescue
+          occ.categoria         = geminiCat;
+          occ.estado            = 'Revisión requerida';
+          occ._gemini_categoria = geminiCat;
+          occ._clasificadoPor   = 'gemini:rescue';
+        } else {
+          // State 5 — ensemble:ambiguous
+          occ.categoria         = null;
+          occ.estado            = 'Revisión requerida';
+          occ._gemini_categoria = geminiCat;
+          occ._clasificadoPor   = 'ensemble:ambiguous';
+        }
+      } else if (localError && geminiHigh) {
+        // State 6 — gemini:fallback
+        occ.categoria           = geminiCat;
+        occ.estado              = 'Revisión requerida';
+        occ._gemini_categoria   = geminiCat;
+        occ._clasificadoPor     = 'gemini:fallback';
+      } else if (localHigh && geminiError) {
+        // State 7 — local:fallback
+        occ._clasificadoPor     = 'local:fallback';
+      } else {
+        // State 8 — system:failure
+        occ.categoria           = null;
+        occ.estado              = 'Revisión requerida';
+        occ._clasificadoPor     = 'system:failure';
+      }
+
+      // ── Safety Rules override ─────────────────────────────────────────────
+      // Critical flags always force human review regardless of arbitration state.
+      if (hasCriticalFlag) occ.estado = 'Revisión requerida';
+
+      // ── Arbitration audit trail ───────────────────────────────────────────
+      occ._arbitraje_audit = {
+        localCat,
+        localConf, localHigh, localLow, localError,
+        geminiConf, geminiCat, geminiHigh, geminiError, geminiReview,
+        hasCriticalFlag,
+        clasificadoPor: occ._clasificadoPor,
+      };
+
+      console.log('[sync][arbitration] folio=' + occ.folio +
+        ' state=' + occ._clasificadoPor +
+        ' localConf=' + localConf.toFixed(3) +
+        ' geminiConf=' + geminiConf.toFixed(3) +
+        ' geminiCat=' + (geminiCat || '—') +
+        ' hasCriticalFlag=' + hasCriticalFlag);
     } catch (e) {
-      console.warn('[sync] Gemini enrichment error (non-blocking):', e.message);
+      console.warn('[sync] Arbitration Engine error (non-blocking):', e.message);
     }
   }
 
