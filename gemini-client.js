@@ -60,9 +60,9 @@ function isShadowMode() {
   return process.env.GEMINI_SHADOW_MODE !== 'false'; // default: true
 }
 
-/** Returns the configured model, falling back to gemini-2.0-flash. */
+/** Returns the configured model, falling back to gemini-3.5-flash. */
 function getModel() {
-  return process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+  return process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 }
 
 // ── System prompt ─────────────────────────────────────────────────────────────
@@ -180,8 +180,9 @@ async function geminiClassify(structuredContext) {
     generationConfig: {
       responseMimeType: 'application/json',
       responseSchema:   GEMINI_RESPONSE_SCHEMA,
-      temperature:      0.1,
+      temperature:      0,
       maxOutputTokens:  1200,
+      thinkingConfig:   { thinkingLevel: 'minimal' },
     },
   };
 
@@ -206,8 +207,8 @@ async function geminiClassify(structuredContext) {
             ' — bytes_received=' + _bytesReceived +
             ' headers_received=' + _headersReceived);
           controller.abort();
-          reject(new Error('Gemini timeout (28s)'));
-        }, 28000);
+          reject(new Error('Gemini timeout (8.5s)'));
+        }, 8500);
 
         const req = https.request({
           hostname: 'generativelanguage.googleapis.com',
@@ -244,7 +245,7 @@ async function geminiClassify(structuredContext) {
           if (err.name === 'AbortError') {
             console.warn('[gemini-diag] ABORT at T+' + (Date.now() - _tPromise) + 'ms' +
               ' — bytes_received=' + _bytesReceived);
-            reject(new Error('Gemini timeout (28s)'));
+            reject(new Error('Gemini timeout (8.5s)'));
           } else {
             reject(err);
           }
@@ -310,8 +311,8 @@ async function geminiClassify(structuredContext) {
       const isRetryable =
         !err.message.includes('Gemini API error') &&   // terminal API errors
         !err.message.includes('finishReason') &&        // safety block / non-STOP
+        !err.message.includes('timeout') &&             // timeout is terminal — single attempt for 8.5s budget
         (
-          err.message.includes('timeout') ||
           err.message.includes('transient error') ||
           err.message.includes('JSON') ||
           err.message.includes('parse') ||
@@ -319,8 +320,8 @@ async function geminiClassify(structuredContext) {
         );
 
       if (attempt === 1 && isRetryable) {
-        // Short backoff: 500 ms after timeout (already waited 15 s), 1000 ms for 503.
-        const backoffMs = err.message.includes('timeout') ? 500 : 1000;
+        // Short backoff: 1000 ms for 503/UNAVAILABLE, JSON/schema parse failures.
+        const backoffMs = 1000;
         console.warn('[gemini] attempt=1 retryable — backoff ' + backoffMs + 'ms — ' + err.message);
         await new Promise(r => setTimeout(r, backoffMs));
         continue;

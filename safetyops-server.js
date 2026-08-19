@@ -862,7 +862,7 @@ async function handleIngestReport(req, res, origin) {
   console.log('[ingest] Auth OK — demo label="' + demoLabel + '" via=' + authResult.via);
   console.log('[ingest] OK — folio=' + occ.folio +
     ' cat=' + (occ.categoria || 'Revisión requerida') +
-    ' clasificadoPor=' + _clasificadoPor +
+    ' clasificadoPor=' + occ._clasificadoPor +
     ' area=' + (occ.area || '—') + ' ip=' + ip);
 
   return sendJSON(res, 200, {
@@ -981,6 +981,20 @@ function _checkIngestRate(ip) {
   const hits = (_ingestRateMap.get(ip) || []).filter(function(t) { return now - t < WIN_MS; });
   hits.push(now);
   _ingestRateMap.set(ip, hits);
+  return hits.length <= MAX_HITS;
+}
+
+// ── In-memory rate limiter for /api/v1/classify ────────────────────────────────
+// Each classify call invokes Gemini — rate limit protects API quota.
+// Same parameters as /ingest: 20 requests per 10-minute window per IP.
+const _classifyRateMap = new Map();
+function _checkClassifyRate(ip) {
+  const now = Date.now();
+  const WIN_MS = 10 * 60 * 1000;
+  const MAX_HITS = 20;
+  const hits = (_classifyRateMap.get(ip) || []).filter(function(t) { return now - t < WIN_MS; });
+  hits.push(now);
+  _classifyRateMap.set(ip, hits);
   return hits.length <= MAX_HITS;
 }
 
@@ -1301,11 +1315,34 @@ function handleHealth(res, origin) {
   }, origin);
 }
 
-// ── Sprint A: POST /api/v1/classify ──────────────────────────────────────────
-// Classifies a text using Gemini (server-side API key).
-// No auth required — public endpoint for any SafetyOps client.
+// ── POST /api/v1/classify ─────────────────────────────────────────────────────
+// Classifies a text using Gemini (server-side API key — never exposed to browser).
+// Security: origin check (when CORS_ORIGINS configured) + IP rate limit (20/10min).
 // No side effects: no DB writes, no WS events, no report creation.
+//
+// Response contract v1.1:
+//   success, classification.{category, confidence, flags, requiere_revision,
+//   justificacion, alternativas, arms.{severidad, probabilidad, nivel_riesgo,
+//   requiere_revision_arms}}, engine.{provider, model, ms}, fallback, version
+//
+// Backward-compatible: classification.risk is populated with nivel_riesgo so
+// frozen frontends using the static _rMap can derive severidad/probabilidad correctly.
 async function handleClassify(req, res, origin) {
+  // 1. Origin check — defense in depth (non-browser callers have no Origin header)
+  // Activated only when CORS_ORIGINS is configured (production). Dev mode is open.
+  if (CORS_ORIGINS && origin && !getAllowedOrigin(origin)) {
+    console.warn('[classify] Rejected — origin not allowed: ' + origin);
+    return sendJSON(res, 403, { success: false, error: 'forbidden', message: 'Origin no permitido.' }, origin);
+  }
+
+  // 2. Rate limit by IP
+  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  if (!_checkClassifyRate(ip)) {
+    console.warn('[classify] Rate limit exceeded — ip=' + ip);
+    return sendJSON(res, 429, { success: false, error: 'rate_limit', message: 'Demasiadas solicitudes. Intentá en unos minutos.' }, origin);
+  }
+
+  // 3. Read + parse body
   let raw;
   try { raw = await readBody(req); }
   catch (err) { return sendJSON(res, 400, { success: false, error: 'read_error' }, origin); }
@@ -1320,7 +1357,11 @@ async function handleClassify(req, res, origin) {
   if (!text) {
     return sendJSON(res, 400, { success: false, error: 'text_required' }, origin);
   }
+  if (text.length > MAX_TEXTO_LENGTH) {
+    return sendJSON(res, 400, { success: false, error: 'text_too_long', message: 'El texto supera el límite permitido.' }, origin);
+  }
 
+  // 4. Engine guard
   if (!isGeminiEnabled()) {
     return sendJSON(res, 503, { success: false, error: 'engine_unavailable', detail: 'GEMINI_API_KEY not configured or GEMINI_ENABLED not true' }, origin);
   }
@@ -1328,7 +1369,7 @@ async function handleClassify(req, res, origin) {
   try {
     const t0 = Date.now();
 
-    // Run local engine first to build structured context for Gemini
+    // 5. Local engine — builds structured context for Gemini AND provides fallback
     let localResult = null;
     try {
       const { clasificarV2 } = require('./analysis-engine/classifier-v2');
@@ -1342,45 +1383,92 @@ async function handleClassify(req, res, origin) {
     const ms = Date.now() - t0;
 
     if (!geminiResult) {
-      // Fallback: return local engine result if available
+      // Gemini failed (timeout, quota, parse error) — use local fallback.
+      // The fallback is FINAL for this submission (no async overwrite possible on HTTP path).
       if (localResult && localResult.categoria) {
-        console.warn('[classify] Gemini unavailable — using local fallback');
+        const localRisk = _deriveRisk(
+          localResult.categoria,
+          [], // local engine doesn't produce Gemini-style flags
+          localResult.confianza || 0,
+          Boolean(localResult._revisarManualmente)
+        );
+        console.warn('[classify] Gemini unavailable — local fallback: ' + localResult.categoria + ' (' + ms + 'ms)');
         return sendJSON(res, 200, {
           success: true,
           classification: {
-            category:   localResult.categoria,
-            risk:       localResult.nivel_riesgo || null,
-            confidence: localResult.confianza    || null,
+            category:           localResult.categoria,
+            confidence:         localResult.confianza    || null,
+            flags:              [],
+            requiere_revision:  Boolean(localResult._revisarManualmente),
+            justificacion:      null,
+            alternativas:       [],
+            arms: {
+              severidad:               localRisk.severidad,
+              probabilidad:            localRisk.probabilidad,
+              nivel_riesgo:            localRisk.nivel_riesgo,
+              requiere_revision_arms:  localRisk._revisarManualmente,
+            },
+            // Backward-compat for frozen frontends using _rMap(risk):
+            risk: localRisk.nivel_riesgo || null,
           },
-          engine: { provider: 'Local', model: 'classifier-v2', ms },
-          version: '1.0',
+          engine:   { provider: 'Local', model: 'classifier-v2', ms },
+          fallback: true,
+          version:  '1.1',
         }, origin);
       }
-      return sendJSON(res, 503, { success: false, error: 'engine_unavailable' }, origin);
+      return sendJSON(res, 503, { success: false, error: 'engine_unavailable', fallback: false }, origin);
     }
 
-    // Gemini returns 29-category ICAO taxonomy directly — no mapping needed
+    // 6. Gemini succeeded — derive ARMS from deterministic rules (Gemini never sets risk)
+    const riskResult = _deriveRisk(
+      geminiResult.categoria,
+      geminiResult.flags_seguridad || [],
+      geminiResult.confianza,
+      geminiResult.requiere_revision
+    );
+
     const category = geminiResult.categoria;
 
     sendJSON(res, 200, {
       success: true,
       classification: {
         category,
-        risk:       geminiResult.nivel_riesgo || null,
-        confidence: geminiResult.confianza    || null,
+        confidence:        geminiResult.confianza,
+        flags:             geminiResult.flags_seguridad      || [],
+        requiere_revision: geminiResult.requiere_revision,
+        justificacion:     geminiResult.justificacion        || null,
+        alternativas:      (geminiResult.categorias_alternativas || []).map(a => ({
+          cat:   a.categoria,
+          score: a.peso,
+        })),
+        arms: {
+          severidad:              riskResult.severidad,
+          probabilidad:           riskResult.probabilidad,
+          nivel_riesgo:           riskResult.nivel_riesgo,
+          requiere_revision_arms: riskResult._revisarManualmente,
+        },
+        // Backward-compat: frozen frontends read classification.risk to derive severidad/probabilidad
+        // via their local _rMap. Populating this prevents the hardcoded 'Marginal/Improbable' fallback.
+        risk: riskResult.nivel_riesgo || null,
       },
       engine: {
         provider: 'Gemini',
         model:    getModel(),
         ms,
       },
-      version: '1.0',
+      fallback: false,
+      version:  '1.1',
     }, origin);
 
-    console.log(`[classify] "${text.slice(0, 60)}" → ${category} (${ms}ms)`);
+    console.log('[classify] "' + text.slice(0, 60) + '" → ' + category +
+      ' flags=[' + (geminiResult.flags_seguridad || []).join(',') + ']' +
+      ' arms=' + riskResult.nivel_riesgo +
+      ' revisa=' + geminiResult.requiere_revision +
+      ' (' + ms + 'ms)');
+
   } catch (err) {
     console.error('[classify] Gemini error:', err.message);
-    sendJSON(res, 503, { success: false, error: 'engine_unavailable' }, origin);
+    sendJSON(res, 503, { success: false, error: 'engine_unavailable', fallback: false }, origin);
   }
 }
 
